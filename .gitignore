@@ -1,0 +1,53 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiterallyIC/cover
+*.out
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+
+# Go workspace file
+go.work
+
+# Misc
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.iml
+
+# Build artifacts
+/build/
+/dist/
+/bin/
+dbsmith
+dbsmith.exe
+
+# Config and data
+~/.config/dbsmith/
+*.workspace.yaml
+*.workspace.yml
+
+# IDE
+.env
+.env.local
+
+# Coverage reports
+coverage.out
+coverage.html
+
+# Task runner (cache, if applicable)
+.task/
+
+.copilot/

@@ -1,0 +1,184 @@
+version: '3'
+
+vars:
+  BINARY_NAME: dbsmith
+  GO: go
+  GOFLAGS: -v
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list-all
+
+  # Build Tasks
+  build:
+    desc: Build binary for current platform
+    cmds:
+      - echo "Building {{.BINARY_NAME}}..."
+      - '{{.GO}} build {{.GOFLAGS}} -o bin/{{.BINARY_NAME}} ./cmd/dbsmith'
+    platforms: [linux, darwin, windows]
+
+  build:windows:
+    desc: Build binary for Windows
+    cmds:
+      - echo "Building {{.BINARY_NAME}} for Windows..."
+      - cmd: 'set GOOS=windows && set GOARCH=amd64 && {{.GO}} build {{.GOFLAGS}} -o bin/{{.BINARY_NAME}}-windows-amd64.exe ./cmd/dbsmith'
+        shell: cmd
+    platforms: [windows]
+
+  build:linux:
+    desc: Build binary for Linux (amd64)
+    cmds:
+      - echo "Building {{.BINARY_NAME}} for Linux..."
+      - GOOS=linux GOARCH=amd64 {{.GO}} build {{.GOFLAGS}} -o bin/{{.BINARY_NAME}}-linux-amd64 ./cmd/dbsmith
+    platforms: [linux, darwin, windows]
+
+  build:darwin:
+    desc: Build binary for macOS (Intel & Apple Silicon)
+    cmds:
+      - echo "Building {{.BINARY_NAME}} for macOS (Intel)..."
+      - GOOS=darwin GOARCH=amd64 {{.GO}} build {{.GOFLAGS}} -o bin/{{.BINARY_NAME}}-darwin-amd64 ./cmd/dbsmith
+      - echo "Building {{.BINARY_NAME}} for macOS (ARM64)..."
+      - GOOS=darwin GOARCH=arm64 {{.GO}} build {{.GOFLAGS}} -o bin/{{.BINARY_NAME}}-darwin-arm64 ./cmd/dbsmith
+    platforms: [linux, darwin, windows]
+
+  build:all:
+    desc: Build binaries for all platforms
+    deps: [build:linux, build:darwin, build:windows]
+
+  # Testing Tasks
+  test:
+    desc: Run tests
+    cmds:
+      - '{{.GO}} test ./...'
+
+  test:verbose:
+    desc: Run tests with verbose output and race detection
+    cmds:
+      - '{{.GO}} test -v -race ./...'
+
+  test:coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - '{{.GO}} test -v -race -coverprofile=coverage.out ./...'
+      - '{{.GO}} tool cover -html=coverage.out -o coverage.html'
+      - echo "Coverage report generated coverage.html"
+
+  lint:
+    desc: Run linter (go vet and optional golangci-lint)
+    cmds:
+      - echo "Linting code..."
+      - '{{.GO}} vet ./...'
+      - cmd: golangci-lint run ./...
+        ignore_error: true
+
+  fmt:
+    desc: Format code with go fmt
+    cmds:
+      - echo "Formatting code..."
+      - '{{.GO}} fmt ./...'
+
+  fmt:check:
+    desc: Check if code needs formatting
+    cmds:
+      - cmd: '{{.GO}} fmt -l ./...'
+        ignore_error: false
+
+  deps:
+    desc: Download and verify dependencies
+    cmds:
+      - '{{.GO}} mod download'
+      - '{{.GO}} mod verify'
+
+  deps:tidy:
+    desc: Tidy up go.mod and go.sum
+    cmds:
+      - '{{.GO}} mod tidy'
+
+  deps:update:
+    desc: Update all dependencies to latest compatible versions
+    cmds:
+      - '{{.GO}} get -u ./...'
+      - '{{.GO}} mod tidy'
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - echo "Cleaning build artifacts..."
+      - '{{.GO}} clean'
+      - cmd: rm -rf bin/
+        ignore_error: true
+      - cmd: rm -rf coverage.out coverage.html
+        ignore_error: true
+
+  clean:all:
+    desc: Clean all generated files including vendor and go.sum
+    deps: [clean]
+    cmds:
+      - cmd: rm -rf vendor/
+        ignore_error: true
+      - cmd: rm go.sum
+        ignore_error: true
+
+  run:
+    desc: Build and run the application
+    deps: [build]
+    cmds:
+      - ./bin/{{.BINARY_NAME}}
+    platforms: [linux, darwin]
+
+  run:windows:
+    desc: Build and run the application (Windows)
+    deps: [build:windows]
+    cmds:
+      - ./bin/{{.BINARY_NAME}}-windows-amd64.exe
+    platforms: [windows]
+
+  run:debug:
+    desc: Run with debug output
+    deps: [build]
+    cmds:
+      - ./bin/{{.BINARY_NAME}} debug
+    platforms: [linux, darwin]
+
+  run:help:
+    desc: Show help
+    deps: [build]
+    cmds:
+      - ./bin/{{.BINARY_NAME}} --help
+    platforms: [linux, darwin]
+
+  install:
+    desc: Install binary to GOBIN
+    deps: [build]
+    cmds:
+      - '{{.GO}} install ./cmd/dbsmith'
+
+  dev:
+    desc: Run full development workflow (fmt, lint, test, build)
+    deps: [fmt, lint, test, build]
+    cmds:
+      - echo "Development build complete!"
+
+  dev:watch:
+    desc: Watch for changes and rebuild (requires watchexec)
+    cmds:
+      - watchexec -e go task dev
+    ignore_error: true
+
+  ci:test:
+    desc: Run CI test suite (format check, lint, tests, build)
+    cmds:
+      - task fmt:check
+      - task lint
+      - task test:coverage
+      - task build:all
+
+  ci:build:
+    desc: Build release binaries for all platforms
+    deps: [build:all]
+    cmds:
+      - echo "Release binaries built successfully!"
+      - cmd: ls -lh bin/
+        ignore_error: true
