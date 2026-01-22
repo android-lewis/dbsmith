@@ -1,56 +1,36 @@
 name: Build
-
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
-
+on: push
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  example:
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        os: [linux, darwin, windows]
-        arch: [amd64, arm64]
-        exclude:
-          - os: darwin
-            arch: arm64
-    
+        include:
+          - { runner: macos-latest,  os: darwin,  arch: amd64, tags: netcgo        }
+          - { runner: macos-latest,  os: darwin,  arch: arm64, tags: netcgo        }
+          - { runner: ubuntu-latest, os: linux,   arch: amd64, env:  CGO_ENABLED=0 }
+          - { runner: ubuntu-latest, os: linux,   arch: amd64, env:  CGO_ENABLED=0 }
+          - { runner: ubuntu-latest, os: windows, arch: amd64, env:  CGO_ENABLED=0 }
     steps:
-    - uses: actions/checkout@v4
-    
-    - uses: actions/setup-go@v5
-      with:
-        go-version: '1.25.3'
-        cache: true
-    
-    - name: Build
-      env:
-        GOOS: ${{ matrix.os }}
-        GOARCH: ${{ matrix.arch }}
-      run: |
-        mkdir -p build
-        go build -o build/db-cli-${{ matrix.os }}-${{ matrix.arch }} ./cmd/dbsmith
-    
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: binaries
-        path: build/
-    
-    - name: Create release artifacts (on tag)
-      if: startsWith(github.ref, 'refs/tags/')
-      run: |
-        cd build
-        for file in *; do
-          sha256sum "$file" > "$file.sha256"
-        done
-    
-    - name: Upload to release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: build/*
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v3
+      - name: Build
+        uses: hashicorp/actions-go-build@main
+        with:
+          product_name: dbsmith
+          product_version: 1.2.3
+          go_version: 1.25.3
+          os: ${{ matrix.os }}
+          arch: ${{ matrix.arch }}
+          instructions: |-
+            cd ./cmd/dbsmith && \
+            ${{ matrix.env }} \
+              go build \
+                -o "$BIN_PATH" \
+                -trimpath \
+                -buildvcs=false \
+                -tags="${{ matrix.tags }}" \
+                -ldflags "
+                  -X 'main.Version=$PRODUCT_VERSION'
+                  -X 'main.Revision=$PRODUCT_REVISION'
+                  -X 'main.RevisionTime=$PRODUCT_REVISION_TIME'
+                "
