@@ -12,7 +12,7 @@ jobs:
           - { runner: ubuntu-latest, os: linux,   arch: amd64, env:  CGO_ENABLED=0 }
           - { runner: ubuntu-latest, os: windows, arch: amd64, env:  CGO_ENABLED=0 }
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build
         uses: hashicorp/actions-go-build@main
         with:
@@ -22,6 +22,7 @@ jobs:
           os: ${{ matrix.os }}
           arch: ${{ matrix.arch }}
           instructions: |-
+            ls -la && \
             cd ./cmd/dbsmith && \
             ${{ matrix.env }} \
               go build \
