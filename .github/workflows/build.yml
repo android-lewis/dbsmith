@@ -22,7 +22,7 @@ jobs:
     
     - uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: '1.25.3'
         cache: true
     
     - name: Build
@@ -31,7 +31,7 @@ jobs:
         GOARCH: ${{ matrix.arch }}
       run: |
         mkdir -p build
-        go build -o build/db-cli-${{ matrix.os }}-${{ matrix.arch }} ./cmd/main.go
+        go build -o build/db-cli-${{ matrix.os }}-${{ matrix.arch }} ./cmd/dbsmith
     
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
