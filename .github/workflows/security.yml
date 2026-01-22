@@ -34,8 +34,8 @@ jobs:
     
     - name: Check dependencies
       run: |
-        go install github.com/sonatype-nexus-community/nancy@latest
-        go list -json -m all | nancy sleuth
+        go install golang.org/x/vuln/cmd/govulncheck@latest
+        govulncheck ./...
     
     - name: Run go vet
       run: go vet ./...
