@@ -34,7 +34,7 @@ jobs:
         go build -o build/db-cli-${{ matrix.os }}-${{ matrix.arch }} ./cmd/main.go
     
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: binaries
         path: build/
