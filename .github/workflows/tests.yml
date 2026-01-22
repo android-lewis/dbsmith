@@ -12,15 +12,16 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest, macos-latest, windows-latest ]
-        go-version: [ '1.21', '1.22' ]
+        go-version: [ '1.25.2' ]
     
     steps:
     - uses: actions/checkout@v4
     
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ matrix.go-version }}
+        cache: true
     
     - name: Download dependencies
       run: go mod download
@@ -32,7 +33,7 @@ jobs:
       run: go vet ./...
     
     - name: Run tests
-      run: GOTOOLCHAIN=go1.25.0+auto go test -v -race -coverprofile=coverage.out ./...
+      run: go test -v -race -coverprofile=coverage.out ./...
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -60,9 +61,10 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: '1.22'
+        cache: true
     
     - name: Build
       env:
