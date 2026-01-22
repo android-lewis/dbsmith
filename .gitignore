@@ -26,6 +26,7 @@ go.work
 .vscode/
 .idea/
 *.iml
+*.db
 
 # Build artifacts
 /build/
@@ -51,3 +52,5 @@ coverage.html
 .task/
 
 .copilot/
+docs/
+.github/*.md

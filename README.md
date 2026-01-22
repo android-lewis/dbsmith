@@ -1,117 +1,41 @@
-# dbsmith - Golang TUI Database Workstation
+# DBSmith
 
-A modern Terminal User Interface (TUI) application for exploring, querying, and exporting data from multiple relational databases. Written in Go with support for PostgreSQL, MySQL/MariaDB, and SQLite.
+A terminal-based database client for PostgreSQL, MySQL, and SQLite.
 
-## Features (Planned v0.1)
+This is in very early development, I plan to support more DBs, autocompletion, server statistics and much more...
 
-- ✅ **Multi-Database Support**: PostgreSQL, MySQL/MariaDB, SQLite
-- ✅ **Schema Explorer**: Browse databases, schemas, tables, columns, and indexes
-- ✅ **SQL Editor**: Write and execute SQL queries with syntax highlighting
-- ✅ **Streaming Results**: Handle large result sets efficiently (10M+ rows)
-- ✅ **Export Formats**: CSV, TSV, JSON, JSONL, SQL INSERT statements
-- ✅ **Workspace Management**: Save connections and queries for reuse
-- ✅ **Secure Credentials**: Passwords stored in OS keyring or encrypted vault
-- ✅ **CLI Mode**: Headless query and export commands
-- ✅ **Cross-Platform**: macOS, Linux, Windows
+## Features
 
-## Project Structure
+- **Multi-Database Support**: PostgreSQL, MySQL/MariaDB, SQLite
+- **Schema Explorer**: Browse schemas, tables, columns, and indexes
+- **SQL Editor**: Multi-tab editor with syntax highlighting
+- **Query Management**: Save, load, and organise queries
+- **Export**: CSV, JSON
+- **Secure Credentials**: System keyring integration with encrypted file fallback
+- **Workspace Persistence**: YAML-based workspace files for connections and queries
 
-```
-cmd/
-├── dbsmith/              # Application entry point
-internal/
-├── cmd/                  # CLI command implementations (Cobra)
-├── tui/                  # Terminal UI components (Bubble Tea)
-├── db/                   # Database drivers (PostgreSQL, MySQL, SQLite)
-├── workspace/            # Workspace persistence (YAML)
-├── secrets/              # Credential storage (keyring/encrypted)
-├── exporter/             # Export format implementations
-└── executor/             # Query execution engine
-pkg/
-└── models/               # Shared data structures
-```
+## Installation
 
-## Quick Start (Development)
+### Build from Source
 
-### Prerequisites
-- Go 1.21 or later
-- Git
-- [Task](https://taskfile.dev/installation/) (task runner)
-
-### Build
 ```bash
-git clone https://github.com/user/dbsmith.git
+git clone https://github.com/android-lewis/dbsmith.git
 cd dbsmith
-task build
-./bin/dbsmith --help
+go build -o dbsmith ./cmd/dbsmith
 ```
 
-### Run Tests
+### Run
+
 ```bash
-task test
+./dbsmith
 ```
 
-### Build for All Platforms
-```bash
-task build:all
-```
+## Usage
 
-### See All Available Tasks
-```bash
-task --list-all
-```
+DBSmith launches directly into a TUI. On first run, you'll be prompted to create or load a workspace file.
 
-## Commands
+## Configuration
 
-### TUI Mode
-```bash
-dbsmith open [workspace-file]
-```
-Opens the interactive terminal UI.
+Workspaces are stored as YAML files (default: `~/.config/dbsmith/workspace.yaml`):
+Passwords are stored in the system keyring when available, otherwise in an encrypted file at `~/.config/dbsmith/.secrets`.
 
-### Query Mode
-```bash
-dbsmith query <connection> <sql>
-dbsmith query my_pg_conn "SELECT * FROM users LIMIT 10"
-```
-
-### Export Mode
-```bash
-dbsmith export <connection> <sql> <output-file>
-dbsmith export my_pg_conn "SELECT * FROM users" users.csv --format csv
-```
-
-### Workspace Management
-```bash
-dbsmith list-connections
-dbsmith store-secret my_pg_password
-```
-
-### Debugging
-```bash
-dbsmith debug          # System info and diagnostics
-dbsmith version        # Version info
-```
-
-## Dependencies
-
-- **Charmbracelet Bubbletea**: TUI framework
-- **Charmbracelet Lipgloss**: Terminal styling
-- **Cobra**: CLI framework
-- **go-keyring**: OS keyring integration
-- **lib/pq**: PostgreSQL driver
-- **go-sql-driver/mysql**: MySQL driver
-- **mattn/go-sqlite3**: SQLite driver
-- **gopkg.in/yaml.v3**: Workspace serialization
-
-## Contributing
-
-(To be defined)
-
-## License
-
-(To be defined)
-
-## Support
-
-For issues, questions, or suggestions, please open an issue on GitHub.

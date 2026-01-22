@@ -6,74 +6,23 @@ on:
       - 'v*'
 
 jobs:
-  create-release:
+  goreleaser:
     runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    
     steps:
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        draft: false
-        prerelease: false
-
-  build-and-upload:
-    needs: create-release
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-            name: dbsmith-linux-amd64
-          - goos: darwin
-            goarch: amd64
-            name: dbsmith-darwin-amd64
-          - goos: darwin
-            goarch: arm64
-            name: dbsmith-darwin-arm64
-          - goos: windows
-            goarch: amd64
-            name: dbsmith-windows-amd64.exe
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.22'
-    
-    - name: Build
-      env:
-        GOOS: ${{ matrix.goos }}
-        GOARCH: ${{ matrix.goarch }}
-      run: |
-        go build -o ${{ matrix.name }} ./cmd/dbsmith
-        sha256sum ${{ matrix.name }} > ${{ matrix.name }}.sha256
-    
-    - name: Upload binary
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./${{ matrix.name }}
-        asset_name: ${{ matrix.name }}
-        asset_content_type: application/octet-stream
-    
-    - name: Upload checksum
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./${{ matrix.name }}.sha256
-        asset_name: ${{ matrix.name }}.sha256
-        asset_content_type: text/plain
+      -
+        name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      -
+        name: Set up Go
+        uses: actions/setup-go@v5
+      -
+        name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

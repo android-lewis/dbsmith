@@ -1,0 +1,56 @@
+name: Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+        exclude:
+          - os: darwin
+            arch: arm64
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache: 'go'
+    
+    - name: Build
+      env:
+        GOOS: ${{ matrix.os }}
+        GOARCH: ${{ matrix.arch }}
+      run: |
+        mkdir -p build
+        go build -o build/db-cli-${{ matrix.os }}-${{ matrix.arch }} ./cmd/main.go
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: binaries
+        path: build/
+    
+    - name: Create release artifacts (on tag)
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+        cd build
+        for file in *; do
+          sha256sum "$file" > "$file.sha256"
+        done
+    
+    - name: Upload to release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
