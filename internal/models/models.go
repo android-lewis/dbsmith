@@ -38,14 +38,15 @@ func (c *Connection) GetSQLDialect() string {
 }
 
 type Workspace struct {
-	Name         string           `yaml:"name"`
-	Connections  []Connection     `yaml:"connections"`
-	SavedQueries []SavedQuery     `yaml:"saved_queries"`
-	LastOpenTabs []string         `yaml:"last_open_tabs,omitempty"`
-	Preferences  *UserPreferences `yaml:"preferences,omitempty"`
-	CreatedAt    time.Time        `yaml:"created_at,omitempty"`
-	LastModified time.Time        `yaml:"last_modified,omitempty"`
-	Version      int              `yaml:"version,omitempty"`
+	Name               string           `yaml:"name"`
+	Connections        []Connection     `yaml:"connections"`
+	SavedQueries       []SavedQuery     `yaml:"saved_queries"`
+	LastOpenTabs       []string         `yaml:"last_open_tabs,omitempty"`
+	LastUsedConnection string           `yaml:"last_used_connection,omitempty"`
+	Preferences        *UserPreferences `yaml:"preferences,omitempty"`
+	CreatedAt          time.Time        `yaml:"created_at,omitempty"`
+	LastModified       time.Time        `yaml:"last_modified,omitempty"`
+	Version            int              `yaml:"version,omitempty"`
 }
 
 type UserPreferences struct {

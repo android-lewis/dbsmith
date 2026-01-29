@@ -324,3 +324,15 @@ func (m *Manager) SetAutocompleteEnabled(enabled bool) error {
 
 	return m.autoSave()
 }
+
+// GetLastUsedConnection returns the name of the last used connection
+func (m *Manager) GetLastUsedConnection() string {
+	return m.workspace.LastUsedConnection
+}
+
+// SetLastUsedConnection saves the name of the last used connection
+func (m *Manager) SetLastUsedConnection(name string) error {
+	m.workspace.LastUsedConnection = name
+	m.workspace.LastModified = time.Now()
+	return m.autoSave()
+}
