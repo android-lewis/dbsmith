@@ -372,17 +372,28 @@ func (e *Editor) displayResults(result *models.QueryResult) {
 	rowCountStr := utils.FormatNumber(int64(rowCount))
 
 	if rowCount == 0 {
-		e.resultsTable.SetTitle(fmt.Sprintf("Results [0 rows, %dms] ", result.ExecutionMs))
+		e.resultsTable.SetTitle(fmt.Sprintf(" Results [0 rows, %dms] ", result.ExecutionMs))
 		e.resultsTable.SetContent(nil)
 		e.resultsTable.SetCell(0, 0, tview.NewTableCell("Query executed successfully, no rows returned"))
 		return
 	}
 
-	e.resultsTable.SetTitle(fmt.Sprintf("Results [%s rows, %dms] ", rowCountStr, result.ExecutionMs))
+	baseTitle := fmt.Sprintf(" Results [%s rows, %dms] ", rowCountStr, result.ExecutionMs)
+	e.resultsTable.SetTitle(baseTitle)
 
 	content := components.NewQueryResultContent(result)
 	content.ApplyAlternatingRowColors()
 	e.resultsTable.SetContent(content)
+
+	// Update title with current row position when navigating
+	e.resultsTable.SetSelectionChangedFunc(func(row, col int) {
+		if row > 0 && row <= rowCount {
+			e.resultsTable.SetTitle(fmt.Sprintf(" Results [Row %s of %s, %dms] ",
+				utils.FormatNumber(int64(row)),
+				rowCountStr,
+				result.ExecutionMs))
+		}
+	})
 
 	e.app.SetFocus(e.resultsTable)
 	theme.SetUnfocused(e.sqlInput)

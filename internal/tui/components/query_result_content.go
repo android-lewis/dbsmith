@@ -51,8 +51,18 @@ func (q *QueryResultContent) GetCell(row, col int) *tview.TableCell {
 	} else {
 		dataRow := row - 1
 		if dataRow < len(q.result.Rows) && col < len(q.result.Rows[dataRow]) {
-			cellText := q.formatCellValue(q.result.Rows[dataRow][col])
-			cell = NewDataCell(cellText)
+			val := q.result.Rows[dataRow][col]
+			isNull := q.isNullValue(val)
+			cellText := q.formatCellValue(val)
+
+			if isNull {
+				// Style NULL values distinctly - italic and muted color
+				cell = tview.NewTableCell(cellText).
+					SetTextColor(theme.ThemeColors.ForegroundMuted).
+					SetAttributes(tcell.AttrItalic)
+			} else {
+				cell = NewDataCell(cellText)
+			}
 
 			if q.altRowColors {
 				var bgColor tcell.Color
@@ -94,6 +104,18 @@ func (q *QueryResultContent) InsertColumn(col int) {}
 
 func (q *QueryResultContent) Clear() {
 	q.cache.Clear()
+}
+
+// isNullValue checks if a value represents NULL
+func (q *QueryResultContent) isNullValue(val interface{}) bool {
+	if val == nil {
+		return true
+	}
+	// Check for string representation of nil
+	if s, ok := val.(string); ok && s == "<nil>" {
+		return true
+	}
+	return false
 }
 
 func (q *QueryResultContent) formatCellValue(val interface{}) string {
