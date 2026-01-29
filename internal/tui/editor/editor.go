@@ -240,6 +240,20 @@ func (e *Editor) executeQuery() {
 		return
 	}
 
+	// Check for destructive queries and show confirmation
+	safetyInfo := util.AnalyzeQuerySafety(sql)
+	if safetyInfo.IsDestructive {
+		confirmMsg := fmt.Sprintf("⚠️ %s Query Warning\n\n%s\n\nAre you sure you want to execute this query?",
+			safetyInfo.QueryType, safetyInfo.Warning)
+		components.ShowConfirm(e.pages, e.app, confirmMsg, func(confirmed bool) {
+			if confirmed {
+				e.prepareForQueryExecution()
+				go e.runQuery(sql)
+			}
+		})
+		return
+	}
+
 	e.prepareForQueryExecution()
 	go e.runQuery(sql)
 }
