@@ -21,6 +21,7 @@ type Driver interface {
 	GetTableIndexes(ctx context.Context, table string) ([]models.Index, error)
 	ExecuteTransaction(ctx context.Context, queries []string) error
 	GetVersion(ctx context.Context) (string, error)
+	GetServerInfo(ctx context.Context) (*models.ServerInfo, error)
 	GetQueryExecutionPlan(ctx context.Context, sql string) (*models.QueryResult, error)
 	GetConnection() *models.Connection
 }

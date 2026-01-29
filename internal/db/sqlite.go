@@ -335,6 +335,72 @@ func (d *SQLiteDriver) GetVersion(ctx context.Context) (string, error) {
 	return version, err
 }
 
+func (d *SQLiteDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, error) {
+	if !d.IsConnected() || d.db == nil {
+		return nil, ErrNotConnected
+	}
+
+	info := &models.ServerInfo{
+		ServerType:     "SQLite",
+		AdditionalInfo: make(map[string]string),
+	}
+
+	// Get version
+	if version, err := d.GetVersion(ctx); err == nil {
+		info.Version = version
+	}
+
+	// SQLite uses file path as "database"
+	if d.connection != nil && d.connection.Database != "" {
+		info.CurrentDatabase = d.connection.Database
+	}
+
+	// SQLite is embedded, no connection/user concepts
+	info.CurrentUser = "N/A (embedded)"
+	info.ConnectionCount = 1
+	info.MaxConnections = 1
+
+	// Get database size (page_count * page_size)
+	var pageCount, pageSize int64
+	if err := d.db.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pageCount); err == nil {
+		if err := d.db.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err == nil {
+			sizeBytes := pageCount * pageSize
+			if sizeBytes < 1024 {
+				info.DatabaseSize = fmt.Sprintf("%d B", sizeBytes)
+			} else if sizeBytes < 1024*1024 {
+				info.DatabaseSize = fmt.Sprintf("%.2f KB", float64(sizeBytes)/1024)
+			} else {
+				info.DatabaseSize = fmt.Sprintf("%.2f MB", float64(sizeBytes)/(1024*1024))
+			}
+		}
+	}
+
+	// SQLite-specific info
+	var journalMode string
+	if err := d.db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode); err == nil {
+		info.AdditionalInfo["Journal Mode"] = journalMode
+	}
+
+	var encoding string
+	if err := d.db.QueryRowContext(ctx, "PRAGMA encoding").Scan(&encoding); err == nil {
+		info.AdditionalInfo["Encoding"] = encoding
+	}
+
+	var autoVacuum int
+	if err := d.db.QueryRowContext(ctx, "PRAGMA auto_vacuum").Scan(&autoVacuum); err == nil {
+		vacuumMode := "None"
+		switch autoVacuum {
+		case 1:
+			vacuumMode = "Full"
+		case 2:
+			vacuumMode = "Incremental"
+		}
+		info.AdditionalInfo["Auto Vacuum"] = vacuumMode
+	}
+
+	return info, nil
+}
+
 func (d *SQLiteDriver) GetQueryExecutionPlan(ctx context.Context, sql string) (*models.QueryResult, error) {
 	if !d.IsConnected() || d.db == nil {
 		return nil, ErrNotConnected

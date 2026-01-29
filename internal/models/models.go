@@ -118,3 +118,16 @@ type ExportConfig struct {
 	Destination   string
 	IncludeHeader bool
 }
+
+// ServerInfo contains database server statistics
+type ServerInfo struct {
+	Version          string
+	ServerType       string
+	Uptime           string
+	CurrentDatabase  string
+	CurrentUser      string
+	ConnectionCount  int
+	MaxConnections   int
+	DatabaseSize     string
+	AdditionalInfo   map[string]string
+}

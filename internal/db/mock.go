@@ -218,6 +218,23 @@ func (md *MockDriver) GetVersion(ctx context.Context) (string, error) {
 	return "PostgreSQL 13.0", nil
 }
 
+func (md *MockDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, error) {
+	if !md.IsConnected() {
+		return nil, ErrNotConnected
+	}
+	return &models.ServerInfo{
+		Version:         "PostgreSQL 13.0 (Mock)",
+		ServerType:      "PostgreSQL",
+		Uptime:          "00:00:00",
+		CurrentDatabase: "mock_db",
+		CurrentUser:     "mock_user",
+		ConnectionCount: 1,
+		MaxConnections:  100,
+		DatabaseSize:    "0 MB",
+		AdditionalInfo:  map[string]string{"Mode": "Mock"},
+	}, nil
+}
+
 func (md *MockDriver) GetTableIndexes(ctx context.Context, table string) ([]models.Index, error) {
 	if !md.IsConnected() {
 		return nil, ErrNotConnected

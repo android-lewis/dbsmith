@@ -293,6 +293,57 @@ func (d *PostgresDriver) GetVersion(ctx context.Context) (string, error) {
 	return version, err
 }
 
+func (d *PostgresDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, error) {
+	if !d.IsConnected() || d.db == nil {
+		return nil, ErrNotConnected
+	}
+
+	info := &models.ServerInfo{
+		ServerType:     "PostgreSQL",
+		AdditionalInfo: make(map[string]string),
+	}
+
+	// Get version
+	if version, err := d.GetVersion(ctx); err == nil {
+		info.Version = version
+	}
+
+	// Get current database and user
+	_ = d.db.QueryRowContext(ctx, "SELECT current_database()").Scan(&info.CurrentDatabase)
+	_ = d.db.QueryRowContext(ctx, "SELECT current_user").Scan(&info.CurrentUser)
+
+	// Get uptime
+	var uptime string
+	if err := d.db.QueryRowContext(ctx, "SELECT date_trunc('second', current_timestamp - pg_postmaster_start_time())::text").Scan(&uptime); err == nil {
+		info.Uptime = uptime
+	}
+
+	// Get connection counts
+	_ = d.db.QueryRowContext(ctx, "SELECT count(*) FROM pg_stat_activity").Scan(&info.ConnectionCount)
+
+	// Get max connections
+	_ = d.db.QueryRowContext(ctx, "SELECT setting::int FROM pg_settings WHERE name = 'max_connections'").Scan(&info.MaxConnections)
+
+	// Get database size
+	var size string
+	if err := d.db.QueryRowContext(ctx, "SELECT pg_size_pretty(pg_database_size(current_database()))").Scan(&size); err == nil {
+		info.DatabaseSize = size
+	}
+
+	// Additional PostgreSQL-specific info
+	var serverEncoding string
+	if err := d.db.QueryRowContext(ctx, "SHOW server_encoding").Scan(&serverEncoding); err == nil {
+		info.AdditionalInfo["Encoding"] = serverEncoding
+	}
+
+	var timezone string
+	if err := d.db.QueryRowContext(ctx, "SHOW timezone").Scan(&timezone); err == nil {
+		info.AdditionalInfo["Timezone"] = timezone
+	}
+
+	return info, nil
+}
+
 func (d *PostgresDriver) GetQueryExecutionPlan(ctx context.Context, sql string) (*models.QueryResult, error) {
 	if !d.IsConnected() || d.db == nil {
 		return nil, ErrNotConnected
