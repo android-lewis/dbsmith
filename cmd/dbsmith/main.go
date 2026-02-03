@@ -10,10 +10,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	version = "0.1.0"
-	appName = "dbsmith"
+// Build-time variables injected via ldflags
+var (
+	Version      = "dev"
+	Revision     = "unknown"
+	RevisionTime = "unknown"
 )
+
+const appName = "dbsmith"
 
 var rootCmd = &cobra.Command{
 	Use:   appName,
@@ -27,9 +31,9 @@ Features:
 - Save and load queries
 - Export results (CSV, JSON, SQL)
 - Secure credential storage`,
-	Version: version,
+	Version: Version,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		application, err := app.New()
+		application, err := app.New(Version)
 		if err != nil {
 			return err
 		}

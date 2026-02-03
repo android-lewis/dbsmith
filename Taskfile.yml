@@ -4,6 +4,8 @@ vars:
   BINARY_NAME: dbsmith
   GO: go
   GOFLAGS: -v
+  VERSION: dev
+  LDFLAGS: -X main.Version={{.VERSION}}
 
 tasks:
   default:
@@ -15,7 +17,7 @@ tasks:
     desc: Build binary for current platform
     cmds:
       - echo "Building {{.BINARY_NAME}}..."
-      - '{{.GO}} build {{.GOFLAGS}} -o bin/{{.BINARY_NAME}} ./cmd/dbsmith'
+      - '{{.GO}} build {{.GOFLAGS}} -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY_NAME}} ./cmd/dbsmith'
     platforms: [linux, darwin, windows]
 
   build:windows:
@@ -25,7 +27,7 @@ tasks:
       GOARCH: amd64
     cmds:
       - echo "Building {{.BINARY_NAME}} for Windows..."
-      - '{{.GO}} build {{.GOFLAGS}} -o bin/{{.BINARY_NAME}}-windows-amd64.exe ./cmd/dbsmith'
+      - '{{.GO}} build {{.GOFLAGS}} -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY_NAME}}-windows-amd64.exe ./cmd/dbsmith'
     platforms: [windows, linux, darwin]
 
   build:linux:
@@ -35,7 +37,7 @@ tasks:
       GOARCH: amd64
     cmds:
       - echo "Building {{.BINARY_NAME}} for Linux..."
-      - '{{.GO}} build {{.GOFLAGS}} -o bin/{{.BINARY_NAME}}-linux-amd64 ./cmd/dbsmith'
+      - '{{.GO}} build {{.GOFLAGS}} -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY_NAME}}-linux-amd64 ./cmd/dbsmith'
     platforms: [linux, darwin, windows]
 
   build:darwin:
@@ -44,11 +46,11 @@ tasks:
       GOOS: darwin
     cmds:
       - echo "Building {{.BINARY_NAME}} for macOS (Intel)..."
-      - cmd: '{{.GO}} build {{.GOFLAGS}} -o bin/{{.BINARY_NAME}}-darwin-amd64 ./cmd/dbsmith'
+      - cmd: '{{.GO}} build {{.GOFLAGS}} -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY_NAME}}-darwin-amd64 ./cmd/dbsmith'
         env:
           GOARCH: amd64
       - echo "Building {{.BINARY_NAME}} for macOS (ARM64)..."
-      - cmd: '{{.GO}} build {{.GOFLAGS}} -o bin/{{.BINARY_NAME}}-darwin-arm64 ./cmd/dbsmith'
+      - cmd: '{{.GO}} build {{.GOFLAGS}} -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY_NAME}}-darwin-arm64 ./cmd/dbsmith'
         env:
           GOARCH: arm64
     platforms: [linux, darwin, windows]
