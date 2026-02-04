@@ -17,7 +17,9 @@ func closeRows(rows *sql.Rows) {
 	}
 }
 
-func rowsToResult(rows *sql.Rows) (*models.QueryResult, error) {
+// scanRowsToResult iterates over rows, scanning each into the result.
+// The caller must close rows after this function returns.
+func scanRowsToResult(rows *sql.Rows) (*models.QueryResult, error) {
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, err

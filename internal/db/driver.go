@@ -121,7 +121,7 @@ func (bd *BaseDriver) ExecuteQuery(ctx context.Context, query string, args ...an
 	}
 	defer closeRows(rows)
 
-	return rowsToResult(rows)
+	return scanRowsToResult(rows)
 }
 
 // ExecuteNonQuery runs a statement that doesn't return rows (INSERT, UPDATE, DELETE).
