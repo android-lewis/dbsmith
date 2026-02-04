@@ -44,7 +44,7 @@ func (d *PostgresDriver) GetSchemas(ctx context.Context) ([]models.Schema, error
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var schemas []models.Schema
 	for rows.Next() {
@@ -75,7 +75,7 @@ func (d *PostgresDriver) GetTables(ctx context.Context, schema models.Schema) ([
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var tables []models.Table
 	for rows.Next() {
@@ -132,7 +132,7 @@ func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) 
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var columns []models.Column
 	for rows.Next() {
@@ -200,7 +200,7 @@ func (d *PostgresDriver) GetDatabases(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var dbs []string
 	for rows.Next() {
@@ -239,9 +239,13 @@ func (d *PostgresDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo,
 		info.Version = version
 	}
 
-	// Get current database and user
-	_ = d.DB().QueryRowContext(ctx, "SELECT current_database()").Scan(&info.CurrentDatabase)
-	_ = d.DB().QueryRowContext(ctx, "SELECT current_user").Scan(&info.CurrentUser)
+	// Get current database and user (informational - errors are acceptable)
+	if err := d.DB().QueryRowContext(ctx, "SELECT current_database()").Scan(&info.CurrentDatabase); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch current database")
+	}
+	if err := d.DB().QueryRowContext(ctx, "SELECT current_user").Scan(&info.CurrentUser); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch current user")
+	}
 
 	// Get uptime
 	var uptime string
@@ -249,11 +253,15 @@ func (d *PostgresDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo,
 		info.Uptime = uptime
 	}
 
-	// Get connection counts
-	_ = d.DB().QueryRowContext(ctx, "SELECT count(*) FROM pg_stat_activity").Scan(&info.ConnectionCount)
+	// Get connection counts (informational - errors are acceptable)
+	if err := d.DB().QueryRowContext(ctx, "SELECT count(*) FROM pg_stat_activity").Scan(&info.ConnectionCount); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch connection count")
+	}
 
-	// Get max connections
-	_ = d.DB().QueryRowContext(ctx, "SELECT setting::int FROM pg_settings WHERE name = 'max_connections'").Scan(&info.MaxConnections)
+	// Get max connections (informational - errors are acceptable)
+	if err := d.DB().QueryRowContext(ctx, "SELECT setting::int FROM pg_settings WHERE name = 'max_connections'").Scan(&info.MaxConnections); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch max connections")
+	}
 
 	// Get database size
 	var size string
@@ -294,7 +302,7 @@ func (d *PostgresDriver) GetTableIndexes(ctx context.Context, table string) ([]m
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	return d.scanIndexRows(rows)
 }

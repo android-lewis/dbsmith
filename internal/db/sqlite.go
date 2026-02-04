@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"regexp"
 	"strings"
@@ -63,7 +64,7 @@ func (d *SQLiteDriver) GetTables(ctx context.Context, schema models.Schema) ([]m
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var tables []models.Table
 	for rows.Next() {
@@ -98,7 +99,7 @@ func (d *SQLiteDriver) GetTableColumns(ctx context.Context, tableName string) (*
 	fkQuery := fmt.Sprintf("PRAGMA foreign_key_list(%s)", tableName)
 	fkRows, err := d.DB().QueryContext(ctx, fkQuery)
 	if err == nil {
-		defer func() { _ = fkRows.Close() }()
+		defer closeRows(fkRows)
 		for fkRows.Next() {
 			var id, seq int
 			var table, from, to, onUpdate, onDelete, match string
@@ -114,7 +115,7 @@ func (d *SQLiteDriver) GetTableColumns(ctx context.Context, tableName string) (*
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var columns []models.Column
 	for rows.Next() {
@@ -174,7 +175,7 @@ func (d *SQLiteDriver) GetTableIndexes(ctx context.Context, table string) ([]mod
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var indexes []models.Index
 	for rows.Next() {
@@ -204,23 +205,8 @@ func (d *SQLiteDriver) GetTableIndexes(ctx context.Context, table string) ([]mod
 			return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 		}
 
-		var columns []string
-		for colRows.Next() {
-			var seqno int
-			var cid int
-			var colName string
-
-			if err := colRows.Scan(&seqno, &cid, &colName); err != nil {
-				_ = colRows.Close()
-				return nil, err
-			}
-			columns = append(columns, colName)
-		}
-		if closeErr := colRows.Close(); closeErr != nil {
-			return nil, closeErr
-		}
-
-		if err := colRows.Err(); err != nil {
+		columns, err := scanIndexColumns(colRows)
+		if err != nil {
 			return nil, err
 		}
 
@@ -229,6 +215,29 @@ func (d *SQLiteDriver) GetTableIndexes(ctx context.Context, table string) ([]mod
 	}
 
 	return indexes, rows.Err()
+}
+
+// scanIndexColumns reads column names from index info rows and handles cleanup.
+func scanIndexColumns(colRows *sql.Rows) ([]string, error) {
+	defer closeRows(colRows)
+
+	var columns []string
+	for colRows.Next() {
+		var seqno int
+		var cid int
+		var colName string
+
+		if err := colRows.Scan(&seqno, &cid, &colName); err != nil {
+			return nil, err
+		}
+		columns = append(columns, colName)
+	}
+
+	if err := colRows.Err(); err != nil {
+		return nil, err
+	}
+
+	return columns, nil
 }
 
 func (d *SQLiteDriver) GetTableData(ctx context.Context, tableName string, limit int, offset int) (*models.QueryResult, error) {

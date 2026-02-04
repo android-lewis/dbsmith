@@ -37,6 +37,7 @@ func NewDriverFactory() *DriverFactory {
 
 	for _, driver := range supportedDrivers {
 		for _, alias := range driver.aliases {
+			// Error ignored: registration cannot fail for hardcoded valid aliases
 			_ = f.Register(alias, driver.constructor)
 		}
 	}

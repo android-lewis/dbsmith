@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/android-lewis/dbsmith/internal/logging"
 	"github.com/android-lewis/dbsmith/internal/models"
 	"github.com/android-lewis/dbsmith/internal/secrets"
 )
@@ -76,7 +77,10 @@ func (bd *BaseDriver) ConnectWithDSN(ctx context.Context, driverName, dsn string
 	}
 
 	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
+		// Close error is secondary to ping failure - log but don't change the returned error
+		if closeErr := db.Close(); closeErr != nil {
+			logging.Debug().Err(closeErr).Msg("failed to close db after ping failure")
+		}
 		return fmt.Errorf("%w: %v", ErrConnectionFailed, err)
 	}
 
@@ -115,7 +119,7 @@ func (bd *BaseDriver) ExecuteQuery(ctx context.Context, query string, args ...an
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	return rowsToResult(rows)
 }

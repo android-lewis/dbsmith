@@ -57,7 +57,7 @@ func (d *MySQLDriver) GetSchemas(ctx context.Context) ([]models.Schema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var schemas []models.Schema
 	for rows.Next() {
@@ -85,7 +85,7 @@ func (d *MySQLDriver) GetTables(ctx context.Context, schema models.Schema) ([]mo
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var tables []models.Table
 	for rows.Next() {
@@ -127,7 +127,7 @@ func (d *MySQLDriver) GetTableColumns(ctx context.Context, tableName string) (*m
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var columns []models.Column
 	for rows.Next() {
@@ -195,7 +195,7 @@ func (d *MySQLDriver) GetDatabases(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var dbs []string
 	for rows.Next() {
@@ -234,9 +234,13 @@ func (d *MySQLDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, er
 		info.Version = version
 	}
 
-	// Get current database and user
-	_ = d.DB().QueryRowContext(ctx, "SELECT DATABASE()").Scan(&info.CurrentDatabase)
-	_ = d.DB().QueryRowContext(ctx, "SELECT USER()").Scan(&info.CurrentUser)
+	// Get current database and user (informational - errors are acceptable)
+	if err := d.DB().QueryRowContext(ctx, "SELECT DATABASE()").Scan(&info.CurrentDatabase); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch current database")
+	}
+	if err := d.DB().QueryRowContext(ctx, "SELECT USER()").Scan(&info.CurrentUser); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch current user")
+	}
 
 	// Get uptime (in seconds, convert to duration string)
 	var uptimeSeconds int64
@@ -247,11 +251,15 @@ func (d *MySQLDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, er
 		info.Uptime = fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
 	}
 
-	// Get connection counts
-	_ = d.DB().QueryRowContext(ctx, "SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_connected'").Scan(&info.ConnectionCount)
+	// Get connection counts (informational - errors are acceptable)
+	if err := d.DB().QueryRowContext(ctx, "SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_connected'").Scan(&info.ConnectionCount); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch connection count")
+	}
 
-	// Get max connections
-	_ = d.DB().QueryRowContext(ctx, "SELECT @@max_connections").Scan(&info.MaxConnections)
+	// Get max connections (informational - errors are acceptable)
+	if err := d.DB().QueryRowContext(ctx, "SELECT @@max_connections").Scan(&info.MaxConnections); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch max connections")
+	}
 
 	// Get database size
 	if info.CurrentDatabase != "" {
