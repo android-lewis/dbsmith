@@ -14,7 +14,6 @@ import (
 
 type PostgresDriver struct {
 	BaseDriver
-	db *sql.DB
 }
 
 func NewPostgresDriver() *PostgresDriver {
@@ -31,81 +30,21 @@ func (d *PostgresDriver) Connect(ctx context.Context, conn *models.Connection, s
 		return err
 	}
 
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrConnectionFailed, err)
-	}
-
-	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-		return fmt.Errorf("%w: %v", ErrConnectionFailed, err)
-	}
-
-	d.db = db
-	d.setConnection(conn)
-	d.setConnected(true)
-
-	return nil
-}
-
-func (d *PostgresDriver) Disconnect(ctx context.Context) error {
-	if d.db != nil {
-		if err := d.db.Close(); err != nil {
-			return fmt.Errorf("failed to disconnect: %v", err)
-		}
-	}
-
-	d.setConnected(false)
-	return nil
-}
-
-func (d *PostgresDriver) Ping(ctx context.Context) error {
-	if !d.IsConnected() || d.db == nil {
-		return ErrNotConnected
-	}
-
-	return d.db.PingContext(ctx)
-}
-
-func (d *PostgresDriver) ExecuteQuery(ctx context.Context, sql string, args ...interface{}) (*models.QueryResult, error) {
-	if !d.IsConnected() || d.db == nil {
-		return nil, ErrNotConnected
-	}
-
-	rows, err := d.db.QueryContext(ctx, sql, args...)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	return rowsToResult(rows)
-}
-
-func (d *PostgresDriver) ExecuteNonQuery(ctx context.Context, sql string, args ...interface{}) (int64, error) {
-	if !d.IsConnected() || d.db == nil {
-		return 0, ErrNotConnected
-	}
-
-	result, err := d.db.ExecContext(ctx, sql, args...)
-	if err != nil {
-		return 0, fmt.Errorf("%w: %v", ErrQueryFailed, err)
-	}
-
-	return result.RowsAffected()
+	return d.ConnectWithDSN(ctx, "postgres", dsn, conn)
 }
 
 func (d *PostgresDriver) GetSchemas(ctx context.Context) ([]models.Schema, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
 	query := `SELECT schema_name, schema_owner FROM information_schema.schemata;`
 
-	rows, err := d.db.QueryContext(ctx, query)
+	rows, err := d.BaseDb().QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var schemas []models.Schema
 	for rows.Next() {
@@ -121,7 +60,7 @@ func (d *PostgresDriver) GetSchemas(ctx context.Context) ([]models.Schema, error
 }
 
 func (d *PostgresDriver) GetTables(ctx context.Context, schema models.Schema) ([]models.Table, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -132,11 +71,11 @@ func (d *PostgresDriver) GetTables(ctx context.Context, schema models.Schema) ([
 		ORDER BY table_name
 	`
 
-	rows, err := d.db.QueryContext(ctx, query, schema.Name)
+	rows, err := d.BaseDb().QueryContext(ctx, query, schema.Name)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var tables []models.Table
 	for rows.Next() {
@@ -152,7 +91,7 @@ func (d *PostgresDriver) GetTables(ctx context.Context, schema models.Schema) ([
 }
 
 func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) (*models.TableColumns, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -189,11 +128,11 @@ func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) 
 		ORDER BY c.ordinal_position
 	`
 
-	rows, err := d.db.QueryContext(ctx, columnQuery, tableName)
+	rows, err := d.BaseDb().QueryContext(ctx, columnQuery, tableName)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var columns []models.Column
 	for rows.Next() {
@@ -216,7 +155,7 @@ func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) 
 
 	ddlQuery := fmt.Sprintf("SELECT pg_get_ddl('public'::regnamespace, '%s'::regclass)", tableName)
 	var ddl string
-	if err := d.db.QueryRowContext(ctx, ddlQuery).Scan(&ddl); err != nil {
+	if err := d.BaseDb().QueryRowContext(ctx, ddlQuery).Scan(&ddl); err != nil {
 		logging.Warn().
 			Err(err).
 			Str("table", tableName).
@@ -230,7 +169,7 @@ func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) 
 }
 
 func (d *PostgresDriver) GetTableData(ctx context.Context, tableName string, limit int, offset int) (*models.QueryResult, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -246,7 +185,7 @@ func (d *PostgresDriver) GetTableData(ctx context.Context, tableName string, lim
 }
 
 func (d *PostgresDriver) GetDatabases(ctx context.Context) ([]string, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -257,11 +196,11 @@ func (d *PostgresDriver) GetDatabases(ctx context.Context) ([]string, error) {
 		ORDER BY datname
 	`
 
-	rows, err := d.db.QueryContext(ctx, query)
+	rows, err := d.BaseDb().QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var dbs []string
 	for rows.Next() {
@@ -275,26 +214,18 @@ func (d *PostgresDriver) GetDatabases(ctx context.Context) ([]string, error) {
 	return dbs, rows.Err()
 }
 
-func (d *PostgresDriver) ExecuteTransaction(ctx context.Context, queries []string) error {
-	if !d.IsConnected() || d.db == nil {
-		return ErrNotConnected
-	}
-
-	return executeTransaction(ctx, d.db, queries)
-}
-
 func (d *PostgresDriver) GetVersion(ctx context.Context) (string, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return "", ErrNotConnected
 	}
 
 	var version string
-	err := d.db.QueryRowContext(ctx, "SELECT version()").Scan(&version)
+	err := d.BaseDb().QueryRowContext(ctx, "SELECT version()").Scan(&version)
 	return version, err
 }
 
 func (d *PostgresDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -308,36 +239,44 @@ func (d *PostgresDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo,
 		info.Version = version
 	}
 
-	// Get current database and user
-	_ = d.db.QueryRowContext(ctx, "SELECT current_database()").Scan(&info.CurrentDatabase)
-	_ = d.db.QueryRowContext(ctx, "SELECT current_user").Scan(&info.CurrentUser)
+	// Get current database and user (informational - errors are acceptable)
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT current_database()").Scan(&info.CurrentDatabase); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch current database")
+	}
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT current_user").Scan(&info.CurrentUser); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch current user")
+	}
 
 	// Get uptime
 	var uptime string
-	if err := d.db.QueryRowContext(ctx, "SELECT date_trunc('second', current_timestamp - pg_postmaster_start_time())::text").Scan(&uptime); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT date_trunc('second', current_timestamp - pg_postmaster_start_time())::text").Scan(&uptime); err == nil {
 		info.Uptime = uptime
 	}
 
-	// Get connection counts
-	_ = d.db.QueryRowContext(ctx, "SELECT count(*) FROM pg_stat_activity").Scan(&info.ConnectionCount)
+	// Get connection counts (informational - errors are acceptable)
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT count(*) FROM pg_stat_activity").Scan(&info.ConnectionCount); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch connection count")
+	}
 
-	// Get max connections
-	_ = d.db.QueryRowContext(ctx, "SELECT setting::int FROM pg_settings WHERE name = 'max_connections'").Scan(&info.MaxConnections)
+	// Get max connections (informational - errors are acceptable)
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT setting::int FROM pg_settings WHERE name = 'max_connections'").Scan(&info.MaxConnections); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch max connections")
+	}
 
 	// Get database size
 	var size string
-	if err := d.db.QueryRowContext(ctx, "SELECT pg_size_pretty(pg_database_size(current_database()))").Scan(&size); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT pg_size_pretty(pg_database_size(current_database()))").Scan(&size); err == nil {
 		info.DatabaseSize = size
 	}
 
 	// Additional PostgreSQL-specific info
 	var serverEncoding string
-	if err := d.db.QueryRowContext(ctx, "SHOW server_encoding").Scan(&serverEncoding); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SHOW server_encoding").Scan(&serverEncoding); err == nil {
 		info.AdditionalInfo["Encoding"] = serverEncoding
 	}
 
 	var timezone string
-	if err := d.db.QueryRowContext(ctx, "SHOW timezone").Scan(&timezone); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SHOW timezone").Scan(&timezone); err == nil {
 		info.AdditionalInfo["Timezone"] = timezone
 	}
 
@@ -345,7 +284,7 @@ func (d *PostgresDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo,
 }
 
 func (d *PostgresDriver) GetQueryExecutionPlan(ctx context.Context, sql string) (*models.QueryResult, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -353,22 +292,22 @@ func (d *PostgresDriver) GetQueryExecutionPlan(ctx context.Context, sql string) 
 	return d.ExecuteQuery(ctx, explainSQL)
 }
 
-func (e *PostgresDriver) GetTableIndexes(ctx context.Context, table string) ([]models.Index, error) {
-	if !e.IsConnected() || e.db == nil {
+func (d *PostgresDriver) GetTableIndexes(ctx context.Context, table string) ([]models.Index, error) {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
-	query := e.buildIndexQuery()
-	rows, err := e.db.QueryContext(ctx, query, table)
+	query := d.buildIndexQuery()
+	rows, err := d.BaseDb().QueryContext(ctx, query, table)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
-	return e.scanIndexRows(rows)
+	return d.scanIndexRows(rows)
 }
 
-func (e *PostgresDriver) buildIndexQuery() string {
+func (d *PostgresDriver) buildIndexQuery() string {
 
 	return `
 		SELECT 
@@ -395,10 +334,10 @@ func (e *PostgresDriver) buildIndexQuery() string {
 	`
 }
 
-func (e *PostgresDriver) scanIndexRows(rows *sql.Rows) ([]models.Index, error) {
+func (d *PostgresDriver) scanIndexRows(rows *sql.Rows) ([]models.Index, error) {
 	var indexes []models.Index
 	for rows.Next() {
-		index, err := e.scanIndexRow(rows)
+		index, err := d.scanIndexRow(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -412,7 +351,7 @@ func (e *PostgresDriver) scanIndexRows(rows *sql.Rows) ([]models.Index, error) {
 	return indexes, nil
 }
 
-func (e *PostgresDriver) scanIndexRow(rows *sql.Rows) (models.Index, error) {
+func (d *PostgresDriver) scanIndexRow(rows *sql.Rows) (models.Index, error) {
 	var indexName string
 	var indexDef string
 	var isUnique bool

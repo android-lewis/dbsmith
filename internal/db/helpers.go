@@ -5,10 +5,21 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/android-lewis/dbsmith/internal/logging"
 	"github.com/android-lewis/dbsmith/internal/models"
 )
 
-func rowsToResult(rows *sql.Rows) (*models.QueryResult, error) {
+// closeRows closes a sql.Rows and logs any error.
+// Use this in defer statements instead of silently ignoring close errors.
+func closeRows(rows *sql.Rows) {
+	if err := rows.Close(); err != nil {
+		logging.Warn().Err(err).Msg("failed to close rows")
+	}
+}
+
+// scanRowsToResult iterates over rows, scanning each into the result.
+// The caller must close rows after this function returns.
+func scanRowsToResult(rows *sql.Rows) (*models.QueryResult, error) {
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, err
@@ -54,7 +65,9 @@ func executeTransaction(ctx context.Context, db *sql.DB, queries []string) error
 
 	for _, q := range queries {
 		if _, err := tx.ExecContext(ctx, q); err != nil {
-			_ = tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				logging.Warn().Err(rbErr).Msg("rollback failed after query error")
+			}
 			return fmt.Errorf("%w: %v", ErrQueryFailed, err)
 		}
 	}

@@ -15,7 +15,6 @@ import (
 
 type MySQLDriver struct {
 	BaseDriver
-	db *sql.DB
 }
 
 func NewMySQLDriver() *MySQLDriver {
@@ -24,12 +23,12 @@ func NewMySQLDriver() *MySQLDriver {
 
 func validateMySQLIdentifier(identifier string) error {
 	if identifier == "" {
-		return fmt.Errorf("identifier cannot be empty")
+		return fmt.Errorf("%w: cannot be empty", ErrInvalidIdentifier)
 	}
 
 	pattern := regexp.MustCompile(`^[a-zA-Z_$][a-zA-Z0-9_$]*$`)
 	if !pattern.MatchString(identifier) {
-		return fmt.Errorf("invalid identifier: contains unsafe characters")
+		return fmt.Errorf("%w: contains unsafe characters", ErrInvalidIdentifier)
 	}
 	return nil
 }
@@ -44,81 +43,21 @@ func (d *MySQLDriver) Connect(ctx context.Context, conn *models.Connection, secr
 		return err
 	}
 
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrConnectionFailed, err)
-	}
-
-	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-		return fmt.Errorf("%w: %v", ErrConnectionFailed, err)
-	}
-
-	d.db = db
-	d.setConnection(conn)
-	d.setConnected(true)
-
-	return nil
-}
-
-func (d *MySQLDriver) Disconnect(ctx context.Context) error {
-	if d.db != nil {
-		if err := d.db.Close(); err != nil {
-			return fmt.Errorf("failed to disconnect: %v", err)
-		}
-	}
-
-	d.setConnected(false)
-	return nil
-}
-
-func (d *MySQLDriver) Ping(ctx context.Context) error {
-	if !d.IsConnected() || d.db == nil {
-		return ErrNotConnected
-	}
-
-	return d.db.PingContext(ctx)
-}
-
-func (d *MySQLDriver) ExecuteQuery(ctx context.Context, sql string, args ...interface{}) (*models.QueryResult, error) {
-	if !d.IsConnected() || d.db == nil {
-		return nil, ErrNotConnected
-	}
-
-	rows, err := d.db.QueryContext(ctx, sql, args...)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	return rowsToResult(rows)
-}
-
-func (d *MySQLDriver) ExecuteNonQuery(ctx context.Context, sql string, args ...interface{}) (int64, error) {
-	if !d.IsConnected() || d.db == nil {
-		return 0, ErrNotConnected
-	}
-
-	result, err := d.db.ExecContext(ctx, sql, args...)
-	if err != nil {
-		return 0, fmt.Errorf("%w: %v", ErrQueryFailed, err)
-	}
-
-	return result.RowsAffected()
+	return d.ConnectWithDSN(ctx, "mysql", dsn, conn)
 }
 
 func (d *MySQLDriver) GetSchemas(ctx context.Context) ([]models.Schema, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
 	query := `SELECT schema_name, DEFAULT_CHARACTER_SET_NAME FROM information_schema.schemata;`
 
-	rows, err := d.db.QueryContext(ctx, query)
+	rows, err := d.BaseDb().QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var schemas []models.Schema
 	for rows.Next() {
@@ -136,17 +75,17 @@ func (d *MySQLDriver) GetSchemas(ctx context.Context) ([]models.Schema, error) {
 }
 
 func (d *MySQLDriver) GetTables(ctx context.Context, schema models.Schema) ([]models.Table, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
 	query := "SELECT TABLE_NAME, TABLE_SCHEMA, TABLE_TYPE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME"
 
-	rows, err := d.db.QueryContext(ctx, query, schema.Name)
+	rows, err := d.BaseDb().QueryContext(ctx, query, schema.Name)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var tables []models.Table
 	for rows.Next() {
@@ -162,7 +101,7 @@ func (d *MySQLDriver) GetTables(ctx context.Context, schema models.Schema) ([]mo
 }
 
 func (d *MySQLDriver) GetTableColumns(ctx context.Context, tableName string) (*models.TableColumns, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -184,11 +123,11 @@ func (d *MySQLDriver) GetTableColumns(ctx context.Context, tableName string) (*m
 		ORDER BY ORDINAL_POSITION
 	`
 
-	rows, err := d.db.QueryContext(ctx, columnQuery, tableName)
+	rows, err := d.BaseDb().QueryContext(ctx, columnQuery, tableName)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var columns []models.Column
 	for rows.Next() {
@@ -215,7 +154,7 @@ func (d *MySQLDriver) GetTableColumns(ctx context.Context, tableName string) (*m
 	var ddl string
 	ddlQuery := fmt.Sprintf("SHOW CREATE TABLE `%s`", tableName)
 	var createTableDDL string
-	if err := d.db.QueryRowContext(ctx, ddlQuery).Scan(&tableName, &createTableDDL); err != nil {
+	if err := d.BaseDb().QueryRowContext(ctx, ddlQuery).Scan(&tableName, &createTableDDL); err != nil {
 		logging.Warn().
 			Err(err).
 			Str("table", tableName).
@@ -230,7 +169,7 @@ func (d *MySQLDriver) GetTableColumns(ctx context.Context, tableName string) (*m
 }
 
 func (d *MySQLDriver) GetTableData(ctx context.Context, tableName string, limit int, offset int) (*models.QueryResult, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -246,17 +185,17 @@ func (d *MySQLDriver) GetTableData(ctx context.Context, tableName string, limit 
 }
 
 func (d *MySQLDriver) GetDatabases(ctx context.Context) ([]string, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
 	query := "SHOW DATABASES"
 
-	rows, err := d.db.QueryContext(ctx, query)
+	rows, err := d.BaseDb().QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
+	defer closeRows(rows)
 
 	var dbs []string
 	for rows.Next() {
@@ -270,26 +209,18 @@ func (d *MySQLDriver) GetDatabases(ctx context.Context) ([]string, error) {
 	return dbs, rows.Err()
 }
 
-func (d *MySQLDriver) ExecuteTransaction(ctx context.Context, queries []string) error {
-	if !d.IsConnected() || d.db == nil {
-		return ErrNotConnected
-	}
-
-	return executeTransaction(ctx, d.db, queries)
-}
-
 func (d *MySQLDriver) GetVersion(ctx context.Context) (string, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return "", ErrNotConnected
 	}
 
 	var version string
-	err := d.db.QueryRowContext(ctx, "SELECT VERSION()").Scan(&version)
+	err := d.BaseDb().QueryRowContext(ctx, "SELECT VERSION()").Scan(&version)
 	return version, err
 }
 
 func (d *MySQLDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -303,29 +234,37 @@ func (d *MySQLDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, er
 		info.Version = version
 	}
 
-	// Get current database and user
-	_ = d.db.QueryRowContext(ctx, "SELECT DATABASE()").Scan(&info.CurrentDatabase)
-	_ = d.db.QueryRowContext(ctx, "SELECT USER()").Scan(&info.CurrentUser)
+	// Get current database and user (informational - errors are acceptable)
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT DATABASE()").Scan(&info.CurrentDatabase); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch current database")
+	}
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT USER()").Scan(&info.CurrentUser); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch current user")
+	}
 
 	// Get uptime (in seconds, convert to duration string)
 	var uptimeSeconds int64
-	if err := d.db.QueryRowContext(ctx, "SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Uptime'").Scan(&uptimeSeconds); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Uptime'").Scan(&uptimeSeconds); err == nil {
 		hours := uptimeSeconds / 3600
 		minutes := (uptimeSeconds % 3600) / 60
 		seconds := uptimeSeconds % 60
 		info.Uptime = fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
 	}
 
-	// Get connection counts
-	_ = d.db.QueryRowContext(ctx, "SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_connected'").Scan(&info.ConnectionCount)
+	// Get connection counts (informational - errors are acceptable)
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_connected'").Scan(&info.ConnectionCount); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch connection count")
+	}
 
-	// Get max connections
-	_ = d.db.QueryRowContext(ctx, "SELECT @@max_connections").Scan(&info.MaxConnections)
+	// Get max connections (informational - errors are acceptable)
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT @@max_connections").Scan(&info.MaxConnections); err != nil {
+		logging.Debug().Err(err).Msg("could not fetch max connections")
+	}
 
 	// Get database size
 	if info.CurrentDatabase != "" {
 		var size float64
-		if err := d.db.QueryRowContext(ctx, `
+		if err := d.BaseDb().QueryRowContext(ctx, `
 			SELECT SUM(data_length + index_length) / 1024 / 1024 
 			FROM information_schema.tables 
 			WHERE table_schema = ?`, info.CurrentDatabase).Scan(&size); err == nil {
@@ -335,12 +274,12 @@ func (d *MySQLDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, er
 
 	// Additional MySQL-specific info
 	var charset string
-	if err := d.db.QueryRowContext(ctx, "SELECT @@character_set_database").Scan(&charset); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT @@character_set_database").Scan(&charset); err == nil {
 		info.AdditionalInfo["Charset"] = charset
 	}
 
 	var collation string
-	if err := d.db.QueryRowContext(ctx, "SELECT @@collation_database").Scan(&collation); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT @@collation_database").Scan(&collation); err == nil {
 		info.AdditionalInfo["Collation"] = collation
 	}
 
@@ -348,7 +287,7 @@ func (d *MySQLDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, er
 }
 
 func (d *MySQLDriver) GetQueryExecutionPlan(ctx context.Context, sql string) (*models.QueryResult, error) {
-	if !d.IsConnected() || d.db == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
