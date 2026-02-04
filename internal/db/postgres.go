@@ -34,13 +34,13 @@ func (d *PostgresDriver) Connect(ctx context.Context, conn *models.Connection, s
 }
 
 func (d *PostgresDriver) GetSchemas(ctx context.Context) ([]models.Schema, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
 	query := `SELECT schema_name, schema_owner FROM information_schema.schemata;`
 
-	rows, err := d.DB().QueryContext(ctx, query)
+	rows, err := d.BaseDb().QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
@@ -60,7 +60,7 @@ func (d *PostgresDriver) GetSchemas(ctx context.Context) ([]models.Schema, error
 }
 
 func (d *PostgresDriver) GetTables(ctx context.Context, schema models.Schema) ([]models.Table, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -71,7 +71,7 @@ func (d *PostgresDriver) GetTables(ctx context.Context, schema models.Schema) ([
 		ORDER BY table_name
 	`
 
-	rows, err := d.DB().QueryContext(ctx, query, schema.Name)
+	rows, err := d.BaseDb().QueryContext(ctx, query, schema.Name)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
@@ -91,7 +91,7 @@ func (d *PostgresDriver) GetTables(ctx context.Context, schema models.Schema) ([
 }
 
 func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) (*models.TableColumns, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -128,7 +128,7 @@ func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) 
 		ORDER BY c.ordinal_position
 	`
 
-	rows, err := d.DB().QueryContext(ctx, columnQuery, tableName)
+	rows, err := d.BaseDb().QueryContext(ctx, columnQuery, tableName)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) 
 
 	ddlQuery := fmt.Sprintf("SELECT pg_get_ddl('public'::regnamespace, '%s'::regclass)", tableName)
 	var ddl string
-	if err := d.DB().QueryRowContext(ctx, ddlQuery).Scan(&ddl); err != nil {
+	if err := d.BaseDb().QueryRowContext(ctx, ddlQuery).Scan(&ddl); err != nil {
 		logging.Warn().
 			Err(err).
 			Str("table", tableName).
@@ -169,7 +169,7 @@ func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) 
 }
 
 func (d *PostgresDriver) GetTableData(ctx context.Context, tableName string, limit int, offset int) (*models.QueryResult, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -185,7 +185,7 @@ func (d *PostgresDriver) GetTableData(ctx context.Context, tableName string, lim
 }
 
 func (d *PostgresDriver) GetDatabases(ctx context.Context) ([]string, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -196,7 +196,7 @@ func (d *PostgresDriver) GetDatabases(ctx context.Context) ([]string, error) {
 		ORDER BY datname
 	`
 
-	rows, err := d.DB().QueryContext(ctx, query)
+	rows, err := d.BaseDb().QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -215,17 +215,17 @@ func (d *PostgresDriver) GetDatabases(ctx context.Context) ([]string, error) {
 }
 
 func (d *PostgresDriver) GetVersion(ctx context.Context) (string, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return "", ErrNotConnected
 	}
 
 	var version string
-	err := d.DB().QueryRowContext(ctx, "SELECT version()").Scan(&version)
+	err := d.BaseDb().QueryRowContext(ctx, "SELECT version()").Scan(&version)
 	return version, err
 }
 
 func (d *PostgresDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -240,43 +240,43 @@ func (d *PostgresDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo,
 	}
 
 	// Get current database and user (informational - errors are acceptable)
-	if err := d.DB().QueryRowContext(ctx, "SELECT current_database()").Scan(&info.CurrentDatabase); err != nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT current_database()").Scan(&info.CurrentDatabase); err != nil {
 		logging.Debug().Err(err).Msg("could not fetch current database")
 	}
-	if err := d.DB().QueryRowContext(ctx, "SELECT current_user").Scan(&info.CurrentUser); err != nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT current_user").Scan(&info.CurrentUser); err != nil {
 		logging.Debug().Err(err).Msg("could not fetch current user")
 	}
 
 	// Get uptime
 	var uptime string
-	if err := d.DB().QueryRowContext(ctx, "SELECT date_trunc('second', current_timestamp - pg_postmaster_start_time())::text").Scan(&uptime); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT date_trunc('second', current_timestamp - pg_postmaster_start_time())::text").Scan(&uptime); err == nil {
 		info.Uptime = uptime
 	}
 
 	// Get connection counts (informational - errors are acceptable)
-	if err := d.DB().QueryRowContext(ctx, "SELECT count(*) FROM pg_stat_activity").Scan(&info.ConnectionCount); err != nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT count(*) FROM pg_stat_activity").Scan(&info.ConnectionCount); err != nil {
 		logging.Debug().Err(err).Msg("could not fetch connection count")
 	}
 
 	// Get max connections (informational - errors are acceptable)
-	if err := d.DB().QueryRowContext(ctx, "SELECT setting::int FROM pg_settings WHERE name = 'max_connections'").Scan(&info.MaxConnections); err != nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT setting::int FROM pg_settings WHERE name = 'max_connections'").Scan(&info.MaxConnections); err != nil {
 		logging.Debug().Err(err).Msg("could not fetch max connections")
 	}
 
 	// Get database size
 	var size string
-	if err := d.DB().QueryRowContext(ctx, "SELECT pg_size_pretty(pg_database_size(current_database()))").Scan(&size); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SELECT pg_size_pretty(pg_database_size(current_database()))").Scan(&size); err == nil {
 		info.DatabaseSize = size
 	}
 
 	// Additional PostgreSQL-specific info
 	var serverEncoding string
-	if err := d.DB().QueryRowContext(ctx, "SHOW server_encoding").Scan(&serverEncoding); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SHOW server_encoding").Scan(&serverEncoding); err == nil {
 		info.AdditionalInfo["Encoding"] = serverEncoding
 	}
 
 	var timezone string
-	if err := d.DB().QueryRowContext(ctx, "SHOW timezone").Scan(&timezone); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "SHOW timezone").Scan(&timezone); err == nil {
 		info.AdditionalInfo["Timezone"] = timezone
 	}
 
@@ -284,7 +284,7 @@ func (d *PostgresDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo,
 }
 
 func (d *PostgresDriver) GetQueryExecutionPlan(ctx context.Context, sql string) (*models.QueryResult, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -293,12 +293,12 @@ func (d *PostgresDriver) GetQueryExecutionPlan(ctx context.Context, sql string) 
 }
 
 func (d *PostgresDriver) GetTableIndexes(ctx context.Context, table string) ([]models.Index, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
 	query := d.buildIndexQuery()
-	rows, err := d.DB().QueryContext(ctx, query, table)
+	rows, err := d.BaseDb().QueryContext(ctx, query, table)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}

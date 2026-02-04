@@ -54,13 +54,13 @@ func (d *SQLiteDriver) GetSchemas(ctx context.Context) ([]models.Schema, error) 
 }
 
 func (d *SQLiteDriver) GetTables(ctx context.Context, schema models.Schema) ([]models.Table, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
 	query := "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
 
-	rows, err := d.DB().QueryContext(ctx, query)
+	rows, err := d.BaseDb().QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
@@ -85,7 +85,7 @@ func (d *SQLiteDriver) GetTables(ctx context.Context, schema models.Schema) ([]m
 }
 
 func (d *SQLiteDriver) GetTableColumns(ctx context.Context, tableName string) (*models.TableColumns, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -97,7 +97,7 @@ func (d *SQLiteDriver) GetTableColumns(ctx context.Context, tableName string) (*
 
 	fkColumns := make(map[string]bool)
 	fkQuery := fmt.Sprintf("PRAGMA foreign_key_list(%s)", tableName)
-	fkRows, err := d.DB().QueryContext(ctx, fkQuery)
+	fkRows, err := d.BaseDb().QueryContext(ctx, fkQuery)
 	if err == nil {
 		defer closeRows(fkRows)
 		for fkRows.Next() {
@@ -111,7 +111,7 @@ func (d *SQLiteDriver) GetTableColumns(ctx context.Context, tableName string) (*
 
 	columnQuery := fmt.Sprintf("PRAGMA table_info(%s)", tableName)
 
-	rows, err := d.DB().QueryContext(ctx, columnQuery)
+	rows, err := d.BaseDb().QueryContext(ctx, columnQuery)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (d *SQLiteDriver) GetTableColumns(ctx context.Context, tableName string) (*
 
 	var ddl string
 	ddlQuery := "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
-	if err := d.DB().QueryRowContext(ctx, ddlQuery, tableName).Scan(&ddl); err != nil {
+	if err := d.BaseDb().QueryRowContext(ctx, ddlQuery, tableName).Scan(&ddl); err != nil {
 		logging.Warn().
 			Err(err).
 			Str("table", tableName).
@@ -160,7 +160,7 @@ func (d *SQLiteDriver) GetTableColumns(ctx context.Context, tableName string) (*
 }
 
 func (d *SQLiteDriver) GetTableIndexes(ctx context.Context, table string) ([]models.Index, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -171,7 +171,7 @@ func (d *SQLiteDriver) GetTableIndexes(ctx context.Context, table string) ([]mod
 	}
 
 	indexListQuery := fmt.Sprintf("PRAGMA index_list(%s)", table)
-	rows, err := d.DB().QueryContext(ctx, indexListQuery)
+	rows, err := d.BaseDb().QueryContext(ctx, indexListQuery)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 	}
@@ -200,7 +200,7 @@ func (d *SQLiteDriver) GetTableIndexes(ctx context.Context, table string) ([]mod
 			return nil, fmt.Errorf("invalid index name: %w", err)
 		}
 		indexInfoQuery := fmt.Sprintf("PRAGMA index_info(%s)", name)
-		colRows, err := d.DB().QueryContext(ctx, indexInfoQuery)
+		colRows, err := d.BaseDb().QueryContext(ctx, indexInfoQuery)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
 		}
@@ -241,7 +241,7 @@ func scanIndexColumns(colRows *sql.Rows) ([]string, error) {
 }
 
 func (d *SQLiteDriver) GetTableData(ctx context.Context, tableName string, limit int, offset int) (*models.QueryResult, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -257,7 +257,7 @@ func (d *SQLiteDriver) GetTableData(ctx context.Context, tableName string, limit
 }
 
 func (d *SQLiteDriver) GetDatabases(ctx context.Context) ([]string, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -265,17 +265,17 @@ func (d *SQLiteDriver) GetDatabases(ctx context.Context) ([]string, error) {
 }
 
 func (d *SQLiteDriver) GetVersion(ctx context.Context) (string, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return "", ErrNotConnected
 	}
 
 	var version string
-	err := d.DB().QueryRowContext(ctx, "SELECT sqlite_version()").Scan(&version)
+	err := d.BaseDb().QueryRowContext(ctx, "SELECT sqlite_version()").Scan(&version)
 	return version, err
 }
 
 func (d *SQLiteDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
@@ -301,8 +301,8 @@ func (d *SQLiteDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, e
 
 	// Get database size (page_count * page_size)
 	var pageCount, pageSize int64
-	if err := d.DB().QueryRowContext(ctx, "PRAGMA page_count").Scan(&pageCount); err == nil {
-		if err := d.DB().QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "PRAGMA page_count").Scan(&pageCount); err == nil {
+		if err := d.BaseDb().QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err == nil {
 			sizeBytes := pageCount * pageSize
 			if sizeBytes < 1024 {
 				info.DatabaseSize = fmt.Sprintf("%d B", sizeBytes)
@@ -316,17 +316,17 @@ func (d *SQLiteDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, e
 
 	// SQLite-specific info
 	var journalMode string
-	if err := d.DB().QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode); err == nil {
 		info.AdditionalInfo["Journal Mode"] = journalMode
 	}
 
 	var encoding string
-	if err := d.DB().QueryRowContext(ctx, "PRAGMA encoding").Scan(&encoding); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "PRAGMA encoding").Scan(&encoding); err == nil {
 		info.AdditionalInfo["Encoding"] = encoding
 	}
 
 	var autoVacuum int
-	if err := d.DB().QueryRowContext(ctx, "PRAGMA auto_vacuum").Scan(&autoVacuum); err == nil {
+	if err := d.BaseDb().QueryRowContext(ctx, "PRAGMA auto_vacuum").Scan(&autoVacuum); err == nil {
 		vacuumMode := "None"
 		switch autoVacuum {
 		case 1:
@@ -341,7 +341,7 @@ func (d *SQLiteDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, e
 }
 
 func (d *SQLiteDriver) GetQueryExecutionPlan(ctx context.Context, sql string) (*models.QueryResult, error) {
-	if !d.IsConnected() || d.DB() == nil {
+	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
