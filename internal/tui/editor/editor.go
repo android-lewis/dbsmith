@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/android-lewis/dbsmith/internal/app"
+	querysafety "github.com/android-lewis/dbsmith/internal/editor"
 	"github.com/android-lewis/dbsmith/internal/models"
 	"github.com/android-lewis/dbsmith/internal/tui/components"
 	"github.com/android-lewis/dbsmith/internal/tui/constants"
@@ -237,6 +238,21 @@ func (e *Editor) executeQuery() {
 	sql, err := e.validateQueryPrerequisites()
 	if err != nil {
 		components.ShowError(e.pages, e.app, err)
+		return
+	}
+
+	// Check for destructive queries and show confirmation
+	safetyInfo := querysafety.AnalyzeQuerySafety(sql)
+	if safetyInfo.IsDestructive {
+		confirmMsg := fmt.Sprintf("%s Query Warning\n\n%s\n\nAre you sure you want to execute this query?",
+			safetyInfo.QueryType, safetyInfo.Warning)
+
+		components.ShowConfirm(e.pages, e.app, confirmMsg, func(confirmed bool) {
+			if confirmed {
+				e.prepareForQueryExecution()
+				go e.runQuery(sql)
+			}
+		})
 		return
 	}
 
