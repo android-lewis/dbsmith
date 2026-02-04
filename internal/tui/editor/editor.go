@@ -392,6 +392,9 @@ func (e *Editor) displayResults(result *models.QueryResult) {
 				utils.FormatNumber(int64(row)),
 				rowCountStr,
 				result.ExecutionMs))
+		} else {
+			// Reset to the base title (total rows) when not on a data row (e.g., header row)
+			e.resultsTable.SetTitle(baseTitle)
 		}
 	})
 
