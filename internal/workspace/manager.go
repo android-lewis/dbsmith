@@ -96,6 +96,10 @@ func (m *Manager) GetName() string {
 	return m.workspace.Name
 }
 
+func (m *Manager) GetFilePath() string {
+	return m.filePath
+}
+
 func (m *Manager) AddConnection(conn models.Connection) error {
 	if conn.Name == "" {
 		return errors.New("connection name is required")
@@ -167,9 +171,9 @@ func (m *Manager) GetConnectionByName(name string) *models.Connection {
 }
 
 func (m *Manager) ListConnections() []models.Connection {
-	connections := make([]models.Connection, len(m.workspace.Connections))
-	copy(connections, m.workspace.Connections)
-	return connections
+	conns := make([]models.Connection, len(m.workspace.Connections))
+	copy(conns, m.workspace.Connections)
+	return conns
 }
 
 func (m *Manager) UpdateConnection(conn models.Connection) error {
@@ -322,5 +326,28 @@ func (m *Manager) SetAutocompleteEnabled(enabled bool) error {
 	m.workspace.Preferences.AutocompleteEnabled = enabled
 	m.workspace.LastModified = time.Now()
 
+	return m.autoSave()
+}
+
+func (m *Manager) GetLastUsedConnection() string {
+	return m.workspace.LastUsedConnection
+}
+
+func (m *Manager) SetLastUsedConnection(name string) error {
+	// Allow clearing last used connection with empty string
+	if name != "" {
+		found := false
+		for _, c := range m.workspace.Connections {
+			if c.Name == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("connection not found: %s", name)
+		}
+	}
+	m.workspace.LastUsedConnection = name
+	m.workspace.LastModified = time.Now()
 	return m.autoSave()
 }

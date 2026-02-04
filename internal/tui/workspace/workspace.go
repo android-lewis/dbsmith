@@ -8,6 +8,7 @@ import (
 
 	"github.com/android-lewis/dbsmith/internal/app"
 	"github.com/android-lewis/dbsmith/internal/db"
+	"github.com/android-lewis/dbsmith/internal/logging"
 	"github.com/android-lewis/dbsmith/internal/models"
 	"github.com/android-lewis/dbsmith/internal/tui/components"
 	"github.com/android-lewis/dbsmith/internal/tui/constants"
@@ -47,6 +48,10 @@ func NewWorkspace(app *tview.Application, pages *tview.Pages, dbApp *app.App, he
 	w.connectionForm = components.NewConnectionFormManager(pages, app)
 	w.configureConnectionFormCallbacks()
 	w.loadingOverlay = components.NewLoadingOverlay()
+
+	if w.dbApp.Workspace.GetFilePath() != "" {
+		w.workspacePath = w.dbApp.Workspace.GetFilePath()
+	}
 
 	w.buildUI()
 	return w
@@ -131,14 +136,28 @@ func (w *Workspace) loadConnections() {
 func (w *Workspace) renderConnectionsList() {
 	w.connectionsList.Clear()
 
+	lastUsed := w.dbApp.Workspace.GetLastUsedConnection()
+	lastUsedIndex := -1
+
 	for i, conn := range w.connections {
 		mainText, secondaryText := w.formatConnectionItem(conn)
 		index := i
+
+		// Track last used connection index
+		if conn.Name == lastUsed {
+			lastUsedIndex = i
+		}
+
 		w.connectionsList.AddItem(mainText, secondaryText, 0, func() {
 			if index >= 0 && index < len(w.connections) {
 				w.selectConnection(&w.connections[index])
 			}
 		})
+	}
+
+	// Pre-select last used connection if not already connected
+	if lastUsedIndex >= 0 && (w.dbApp.Driver == nil || !w.dbApp.Driver.IsConnected()) {
+		w.connectionsList.SetCurrentItem(lastUsedIndex)
 	}
 }
 
@@ -369,6 +388,11 @@ func (w *Workspace) selectConnection(conn *models.Connection) {
 				components.ShowError(w.pages, w.app, fmt.Errorf("failed to connect: %w", err))
 			})
 			return
+		}
+
+		// Save as last used connection
+		if err := w.dbApp.Workspace.SetLastUsedConnection(conn.Name); err != nil {
+			logging.Warn().Err(err).Msg("Failed to save last used connection")
 		}
 
 		w.app.QueueUpdateDraw(func() {
