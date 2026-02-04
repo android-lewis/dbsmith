@@ -1,13 +1,13 @@
-package util
+package editor
 
 import "testing"
 
 func TestAnalyzeQuerySafety(t *testing.T) {
 	tests := []struct {
-		name          string
-		sql           string
+		name            string
+		sql             string
 		wantDestructive bool
-		wantType      string
+		wantType        string
 	}{
 		// Safe queries
 		{"SELECT", "SELECT * FROM users", false, ""},
