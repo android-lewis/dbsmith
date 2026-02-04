@@ -171,7 +171,9 @@ func (m *Manager) GetConnectionByName(name string) *models.Connection {
 }
 
 func (m *Manager) ListConnections() []models.Connection {
-	return m.workspace.Connections
+	conns := make([]models.Connection, len(m.workspace.Connections))
+	copy(conns, m.workspace.Connections)
+	return conns
 }
 
 func (m *Manager) UpdateConnection(conn models.Connection) error {
