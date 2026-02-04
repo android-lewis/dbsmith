@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/android-lewis/dbsmith/internal/app"
-	"github.com/android-lewis/dbsmith/internal/editor"
+	querysafety "github.com/android-lewis/dbsmith/internal/editor"
 	"github.com/android-lewis/dbsmith/internal/models"
 	"github.com/android-lewis/dbsmith/internal/tui/components"
 	"github.com/android-lewis/dbsmith/internal/tui/constants"
