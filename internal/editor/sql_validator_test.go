@@ -43,6 +43,13 @@ func TestAnalyzeQuerySafety(t *testing.T) {
 		{"Multiline DELETE with WHERE", "DELETE\nFROM\nusers\nWHERE\nid = 1", false, ""},
 		{"Empty string", "", false, ""},
 		{"Whitespace only", "   \n\t  ", false, ""},
+
+		// String literal edge cases - WHERE in string should not count as real WHERE
+		{"UPDATE with WHERE in string value", "UPDATE t SET note='WHERE'", true, "UPDATE"},
+		{"UPDATE with WHERE in string and real WHERE", "UPDATE t SET note='WHERE' WHERE id=1", false, ""},
+		{"DELETE with keyword in string", "DELETE FROM t WHERE col = 'DELETE FROM'", false, ""},
+		{"UPDATE with escaped quote", "UPDATE t SET note='it''s WHERE' ", true, "UPDATE"},
+		{"UPDATE with double-quoted identifier", `UPDATE t SET "WHERE" = 1`, true, "UPDATE"},
 	}
 
 	for _, tt := range tests {
@@ -72,9 +79,10 @@ func TestCleanSQL(t *testing.T) {
 	}{
 		{"simple", "SELECT 1", "SELECT 1"},
 		{"line comment", "SELECT 1 -- comment", "SELECT 1"},
-		{"block comment", "SELECT /* comment */ 1", "SELECT   1"}, // block comments become single space
+		{"block comment", "SELECT /* comment */ 1", "SELECT 1"},
 		{"multiline", "SELECT\n1", "SELECT 1"},
 		{"multiple line comments", "-- first\nSELECT 1\n-- second", "SELECT 1"},
+		{"multiple spaces", "SELECT    1", "SELECT 1"},
 	}
 
 	for _, tt := range tests {
