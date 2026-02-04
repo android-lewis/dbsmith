@@ -59,7 +59,8 @@ func (q *QueryResultContent) GetCell(row, col int) *tview.TableCell {
 				// Style NULL values distinctly - italic and muted color
 				cell = tview.NewTableCell(cellText).
 					SetTextColor(theme.ThemeColors.ForegroundMuted).
-					SetAttributes(tcell.AttrItalic)
+					SetAttributes(tcell.AttrItalic).
+					SetExpansion(1)
 			} else {
 				cell = NewDataCell(cellText)
 			}

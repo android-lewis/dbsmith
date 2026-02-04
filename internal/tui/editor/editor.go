@@ -43,6 +43,10 @@ type Editor struct {
 	queryCancel    context.CancelFunc
 	isQueryRunning bool
 
+	// Result state for selection callback (avoids re-registering callback per query)
+	resultRowCount int
+	resultExecMs   int64
+
 	savedQueriesManager    *components.SavedQueriesManager
 	exportManager          *components.ExportManager
 	onRunningStateChange   func(bool)
@@ -105,6 +109,20 @@ func (e *Editor) buildUI() {
 	e.resultsTable.SetSelectedStyle(tcell.StyleDefault.
 		Background(theme.ThemeColors.Selection).
 		Foreground(theme.ThemeColors.SelectionText))
+
+	// Register selection callback once (uses state fields updated by displayResults)
+	e.resultsTable.SetSelectionChangedFunc(func(row, col int) {
+		if e.resultRowCount > 0 && row > 0 && row <= e.resultRowCount {
+			e.resultsTable.SetTitle(fmt.Sprintf(" Results [Row %s of %s, %dms] ",
+				utils.FormatNumber(int64(row)),
+				utils.FormatNumber(int64(e.resultRowCount)),
+				e.resultExecMs))
+		} else if e.resultRowCount > 0 {
+			e.resultsTable.SetTitle(fmt.Sprintf(" Results [%s rows, %dms] ",
+				utils.FormatNumber(int64(e.resultRowCount)),
+				e.resultExecMs))
+		}
+	})
 
 	e.analysisView = tview.NewTextView().
 		SetDynamicColors(true).
@@ -371,6 +389,10 @@ func (e *Editor) displayResults(result *models.QueryResult) {
 	rowCount := len(result.Rows)
 	rowCountStr := utils.FormatNumber(int64(rowCount))
 
+	// Update state for selection callback (registered once in buildUI)
+	e.resultRowCount = rowCount
+	e.resultExecMs = result.ExecutionMs
+
 	if rowCount == 0 {
 		e.resultsTable.SetTitle(fmt.Sprintf(" Results [0 rows, %dms] ", result.ExecutionMs))
 		e.resultsTable.SetContent(nil)
@@ -378,25 +400,11 @@ func (e *Editor) displayResults(result *models.QueryResult) {
 		return
 	}
 
-	baseTitle := fmt.Sprintf(" Results [%s rows, %dms] ", rowCountStr, result.ExecutionMs)
-	e.resultsTable.SetTitle(baseTitle)
+	e.resultsTable.SetTitle(fmt.Sprintf(" Results [%s rows, %dms] ", rowCountStr, result.ExecutionMs))
 
 	content := components.NewQueryResultContent(result)
 	content.ApplyAlternatingRowColors()
 	e.resultsTable.SetContent(content)
-
-	// Update title with current row position when navigating
-	e.resultsTable.SetSelectionChangedFunc(func(row, col int) {
-		if row > 0 && row <= rowCount {
-			e.resultsTable.SetTitle(fmt.Sprintf(" Results [Row %s of %s, %dms] ",
-				utils.FormatNumber(int64(row)),
-				rowCountStr,
-				result.ExecutionMs))
-		} else {
-			// Reset to the base title (total rows) when not on a data row (e.g., header row)
-			e.resultsTable.SetTitle(baseTitle)
-		}
-	})
 
 	e.app.SetFocus(e.resultsTable)
 	theme.SetUnfocused(e.sqlInput)
