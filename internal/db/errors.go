@@ -13,4 +13,5 @@ var (
 	ErrInvalidSQL           = errors.New("invalid SQL syntax")
 	ErrOperationTimeout     = errors.New("operation timeout")
 	ErrUnsupportedOperation = errors.New("this operation is not supported")
+	ErrInvalidIdentifier    = errors.New("invalid identifier")
 )

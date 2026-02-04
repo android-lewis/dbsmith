@@ -23,12 +23,12 @@ func NewMySQLDriver() *MySQLDriver {
 
 func validateMySQLIdentifier(identifier string) error {
 	if identifier == "" {
-		return fmt.Errorf("identifier cannot be empty")
+		return fmt.Errorf("%w: cannot be empty", ErrInvalidIdentifier)
 	}
 
 	pattern := regexp.MustCompile(`^[a-zA-Z_$][a-zA-Z0-9_$]*$`)
 	if !pattern.MatchString(identifier) {
-		return fmt.Errorf("invalid identifier: contains unsafe characters")
+		return fmt.Errorf("%w: contains unsafe characters", ErrInvalidIdentifier)
 	}
 	return nil
 }
