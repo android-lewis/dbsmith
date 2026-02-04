@@ -288,6 +288,65 @@ func (d *MySQLDriver) GetVersion(ctx context.Context) (string, error) {
 	return version, err
 }
 
+func (d *MySQLDriver) GetServerInfo(ctx context.Context) (*models.ServerInfo, error) {
+	if !d.IsConnected() || d.db == nil {
+		return nil, ErrNotConnected
+	}
+
+	info := &models.ServerInfo{
+		ServerType:     "MySQL",
+		AdditionalInfo: make(map[string]string),
+	}
+
+	// Get version
+	if version, err := d.GetVersion(ctx); err == nil {
+		info.Version = version
+	}
+
+	// Get current database and user
+	_ = d.db.QueryRowContext(ctx, "SELECT DATABASE()").Scan(&info.CurrentDatabase)
+	_ = d.db.QueryRowContext(ctx, "SELECT USER()").Scan(&info.CurrentUser)
+
+	// Get uptime (in seconds, convert to duration string)
+	var uptimeSeconds int64
+	if err := d.db.QueryRowContext(ctx, "SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Uptime'").Scan(&uptimeSeconds); err == nil {
+		hours := uptimeSeconds / 3600
+		minutes := (uptimeSeconds % 3600) / 60
+		seconds := uptimeSeconds % 60
+		info.Uptime = fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+	}
+
+	// Get connection counts
+	_ = d.db.QueryRowContext(ctx, "SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_connected'").Scan(&info.ConnectionCount)
+
+	// Get max connections
+	_ = d.db.QueryRowContext(ctx, "SELECT @@max_connections").Scan(&info.MaxConnections)
+
+	// Get database size
+	if info.CurrentDatabase != "" {
+		var size float64
+		if err := d.db.QueryRowContext(ctx, `
+			SELECT SUM(data_length + index_length) / 1024 / 1024 
+			FROM information_schema.tables 
+			WHERE table_schema = ?`, info.CurrentDatabase).Scan(&size); err == nil {
+			info.DatabaseSize = fmt.Sprintf("%.2f MB", size)
+		}
+	}
+
+	// Additional MySQL-specific info
+	var charset string
+	if err := d.db.QueryRowContext(ctx, "SELECT @@character_set_database").Scan(&charset); err == nil {
+		info.AdditionalInfo["Charset"] = charset
+	}
+
+	var collation string
+	if err := d.db.QueryRowContext(ctx, "SELECT @@collation_database").Scan(&collation); err == nil {
+		info.AdditionalInfo["Collation"] = collation
+	}
+
+	return info, nil
+}
+
 func (d *MySQLDriver) GetQueryExecutionPlan(ctx context.Context, sql string) (*models.QueryResult, error) {
 	if !d.IsConnected() || d.db == nil {
 		return nil, ErrNotConnected
