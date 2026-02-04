@@ -48,6 +48,10 @@ func NewWorkspace(app *tview.Application, pages *tview.Pages, dbApp *app.App, he
 	w.configureConnectionFormCallbacks()
 	w.loadingOverlay = components.NewLoadingOverlay()
 
+	if w.dbApp.Workspace.GetFilePath() != "" {
+		w.workspacePath = w.dbApp.Workspace.GetFilePath()
+	}
+
 	w.buildUI()
 	return w
 }
