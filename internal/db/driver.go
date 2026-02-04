@@ -64,7 +64,7 @@ func (bd *BaseDriver) validateConnection(conn *models.Connection, expectedType m
 }
 
 // DB returns the underlying *sql.DB for driver-specific operations.
-func (bd *BaseDriver) BaseBaseDb() *sql.DB {
+func (bd *BaseDriver) BaseDb() *sql.DB {
 	return bd.db
 }
 
