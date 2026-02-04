@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 
 	"github.com/android-lewis/dbsmith/internal/models"
 	"github.com/android-lewis/dbsmith/internal/secrets"
@@ -26,7 +28,10 @@ type Driver interface {
 	GetConnection() *models.Connection
 }
 
+// BaseDriver provides common functionality for all database drivers.
+// Embed this in concrete driver implementations to inherit shared behavior.
 type BaseDriver struct {
+	db         *sql.DB
 	connection *models.Connection
 	connected  bool
 }
@@ -55,4 +60,84 @@ func (bd *BaseDriver) validateConnection(conn *models.Connection, expectedType m
 		return ErrInvalidConnection
 	}
 	return nil
+}
+
+// DB returns the underlying *sql.DB for driver-specific operations.
+func (bd *BaseDriver) DB() *sql.DB {
+	return bd.db
+}
+
+// ConnectWithDSN opens a database connection using the provided driver name and DSN.
+// This is a helper for concrete driver Connect implementations.
+func (bd *BaseDriver) ConnectWithDSN(ctx context.Context, driverName, dsn string, conn *models.Connection) error {
+	db, err := sql.Open(driverName, dsn)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrConnectionFailed, err)
+	}
+
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return fmt.Errorf("%w: %v", ErrConnectionFailed, err)
+	}
+
+	bd.db = db
+	bd.setConnection(conn)
+	bd.setConnected(true)
+	return nil
+}
+
+// Disconnect closes the database connection.
+func (bd *BaseDriver) Disconnect(ctx context.Context) error {
+	if bd.db != nil {
+		if err := bd.db.Close(); err != nil {
+			return fmt.Errorf("failed to disconnect: %w", err)
+		}
+	}
+	bd.setConnected(false)
+	return nil
+}
+
+// Ping verifies the database connection is still alive.
+func (bd *BaseDriver) Ping(ctx context.Context) error {
+	if !bd.IsConnected() || bd.db == nil {
+		return ErrNotConnected
+	}
+	return bd.db.PingContext(ctx)
+}
+
+// ExecuteQuery runs a query and returns the result set.
+func (bd *BaseDriver) ExecuteQuery(ctx context.Context, query string, args ...any) (*models.QueryResult, error) {
+	if !bd.IsConnected() || bd.db == nil {
+		return nil, ErrNotConnected
+	}
+
+	rows, err := bd.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return rowsToResult(rows)
+}
+
+// ExecuteNonQuery runs a statement that doesn't return rows (INSERT, UPDATE, DELETE).
+func (bd *BaseDriver) ExecuteNonQuery(ctx context.Context, query string, args ...any) (int64, error) {
+	if !bd.IsConnected() || bd.db == nil {
+		return 0, ErrNotConnected
+	}
+
+	result, err := bd.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+
+	return result.RowsAffected()
+}
+
+// ExecuteTransaction runs multiple queries in a transaction.
+func (bd *BaseDriver) ExecuteTransaction(ctx context.Context, queries []string) error {
+	if !bd.IsConnected() || bd.db == nil {
+		return ErrNotConnected
+	}
+	return executeTransaction(ctx, bd.db, queries)
 }
