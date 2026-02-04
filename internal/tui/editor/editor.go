@@ -242,7 +242,7 @@ func (e *Editor) executeQuery() {
 	}
 
 	// Check for destructive queries and show confirmation
-	safetyInfo := editor.AnalyzeQuerySafety(sql)
+	safetyInfo := querysafety.AnalyzeQuerySafety(sql)
 	if safetyInfo.IsDestructive {
 		confirmMsg := fmt.Sprintf("%s Query Warning\n\n%s\n\nAre you sure you want to execute this query?",
 			safetyInfo.QueryType, safetyInfo.Warning)
