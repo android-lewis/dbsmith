@@ -332,6 +332,19 @@ func (m *Manager) GetLastUsedConnection() string {
 }
 
 func (m *Manager) SetLastUsedConnection(name string) error {
+	// Allow clearing last used connection with empty string
+	if name != "" {
+		found := false
+		for _, c := range m.workspace.Connections {
+			if c.Name == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("connection not found: %s", name)
+		}
+	}
 	m.workspace.LastUsedConnection = name
 	m.workspace.LastModified = time.Now()
 	return m.autoSave()

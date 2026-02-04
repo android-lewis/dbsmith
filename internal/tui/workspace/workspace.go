@@ -8,6 +8,7 @@ import (
 
 	"github.com/android-lewis/dbsmith/internal/app"
 	"github.com/android-lewis/dbsmith/internal/db"
+	"github.com/android-lewis/dbsmith/internal/logging"
 	"github.com/android-lewis/dbsmith/internal/models"
 	"github.com/android-lewis/dbsmith/internal/tui/components"
 	"github.com/android-lewis/dbsmith/internal/tui/constants"
@@ -391,8 +392,7 @@ func (w *Workspace) selectConnection(conn *models.Connection) {
 
 		// Save as last used connection
 		if err := w.dbApp.Workspace.SetLastUsedConnection(conn.Name); err != nil {
-			// Non-fatal, just log
-			_ = err
+			logging.Warn().Err(err).Msg("Failed to save last used connection")
 		}
 
 		w.app.QueueUpdateDraw(func() {
