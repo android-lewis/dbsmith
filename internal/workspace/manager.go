@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/android-lewis/dbsmith/internal/config"
 	"github.com/android-lewis/dbsmith/internal/constants"
 	"github.com/android-lewis/dbsmith/internal/logging"
 	"github.com/android-lewis/dbsmith/internal/models"
@@ -15,15 +15,12 @@ import (
 )
 
 func GetDefaultWorkspacePath() string {
-	home, err := os.UserHomeDir()
+	defaultPath, err := config.GetConfigFilePath(constants.DefaultWorkspaceFileName)
 	if err != nil {
 		return ""
 	}
-	defaultPath := filepath.Join(home, ".config", "dbsmith", "workspace.yaml")
-	if _, err := os.Stat(defaultPath); err == nil {
-		return defaultPath
-	}
-	return ""
+
+	return defaultPath
 }
 
 type Manager struct {

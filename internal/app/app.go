@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/android-lewis/dbsmith/internal/config"
 	"github.com/android-lewis/dbsmith/internal/db"
 	"github.com/android-lewis/dbsmith/internal/executor"
 	"github.com/android-lewis/dbsmith/internal/explorer"
@@ -27,6 +28,7 @@ type App struct {
 	Cleanup func()
 	Context context.Context
 
+	Config         *config.Config
 	Workspace      *wsmgr.Manager
 	Connection     *models.Connection
 	SecretsManager secrets.Manager
@@ -37,23 +39,42 @@ type App struct {
 	configDir string
 }
 
-func New(version string) (*App, error) {
-	configDir, err := getConfigDir()
+func New() (*App, error) {
+	configDir, err := config.GetConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config directory: %w", err)
 	}
 
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
 	logCfg := logging.DefaultConfig(configDir)
+
+	switch cfg.Logging.Level {
+	case "debug":
+		logCfg.Level = zerolog.DebugLevel
+	case "warn":
+		logCfg.Level = zerolog.WarnLevel
+	case "error":
+		logCfg.Level = zerolog.ErrorLevel
+	default:
+		logCfg.Level = zerolog.InfoLevel
+	}
+
 	if os.Getenv("DBSMITH_LOG_LEVEL") == "debug" {
 		logCfg.Level = zerolog.DebugLevel
 	}
+	logCfg.MaxSizeMB = cfg.Logging.MaxSizeMB
+	logCfg.MaxBackups = cfg.Logging.MaxBackups
+	logCfg.MaxAgeDays = cfg.Logging.MaxAgeDays
 
 	if err := logging.Initialize(logCfg); err != nil {
 		return nil, fmt.Errorf("failed to initialize logger: %w", err)
 	}
 
 	logging.Info().
-		Str("version", version).
 		Str("config_dir", configDir).
 		Msg("Starting DBSmith")
 
@@ -68,6 +89,7 @@ func New(version string) (*App, error) {
 	logging.Info().Msg("Application initialized successfully")
 
 	return &App{
+		Config:         cfg,
 		Workspace:      ws,
 		SecretsManager: secret,
 		Cleanup:        cancel,
@@ -102,7 +124,9 @@ func (a *App) ConnectToDatabase(conn *models.Connection) error {
 		return fmt.Errorf("failed to create driver: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(a.Context, DefaultTimeout)
+	// Use configured timeout
+	timeout := a.Config.GetConnectionTimeout()
+	ctx, cancel := context.WithTimeout(a.Context, timeout)
 	defer cancel()
 
 	if err := driver.Connect(ctx, conn, a.SecretsManager); err != nil {
@@ -154,14 +178,6 @@ func (a *App) Disconnect() error {
 	logging.Info().Str("connection_name", connName).Msg("Successfully disconnected")
 
 	return nil
-}
-
-func getConfigDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-	return filepath.Join(home, ConfigDirName), nil
 }
 
 func loadWorkspace(configDir string) (*wsmgr.Manager, secrets.Manager, error) {
