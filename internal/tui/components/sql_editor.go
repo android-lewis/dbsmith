@@ -75,6 +75,10 @@ func (e *SQLEditor) SetDialect(dialect string) *SQLEditor {
 	return e
 }
 
+func (e *SQLEditor) GetDialect() string {
+	return e.dialect
+}
+
 func (e *SQLEditor) SetPlaceholder(placeholder string) *SQLEditor {
 
 	lines := strings.Split(placeholder, "\n")
@@ -87,6 +91,21 @@ func (e *SQLEditor) SetPlaceholder(placeholder string) *SQLEditor {
 func (e *SQLEditor) SetInputCapture(capture func(event *tcell.EventKey) *tcell.EventKey) *SQLEditor {
 	e.TextArea.SetInputCapture(capture)
 	return e
+}
+
+func (e *SQLEditor) CursorPosition() (int, int) {
+	_, _, row, col := e.TextArea.GetCursor()
+	return row, col
+}
+
+func (e *SQLEditor) OffsetAt(line, col int) int {
+	lines := strings.Split(e.GetText(), "\n")
+	return e.offsetAt(lines, line, col)
+}
+
+func (e *SQLEditor) ReplaceRange(start, end int, text string) {
+	e.TextArea.Replace(start, end, text)
+	e.contentChanged = true
 }
 
 func (e *SQLEditor) Draw(screen tcell.Screen) {

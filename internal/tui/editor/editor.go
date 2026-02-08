@@ -32,17 +32,21 @@ type Editor struct {
 	helpBar   *components.HelpBar
 	statusBar *components.StatusBar
 
-	mainFlex     *tview.Flex
-	sqlInput     *components.SQLEditor
-	resultsTable *tview.Table
-	analysisView *tview.TextView
-	bottomFlex   *tview.Flex
-	queryStats   *components.QueryStats
+	mainFlex          *tview.Flex
+	sqlInput          *components.SQLEditor
+	resultsTable      *tview.Table
+	analysisView      *tview.TextView
+	bottomFlex        *tview.Flex
+	queryStats        *components.QueryStats
+	completionOverlay *completionOverlay
 
 	mode           editorMode
 	lastResult     *models.QueryResult
 	queryCancel    context.CancelFunc
 	isQueryRunning bool
+
+	completionState completionState
+	completionCache completionCache
 
 	// Result state for selection callback (avoids re-registering callback per query)
 	resultRowCount int
@@ -96,6 +100,7 @@ func (e *Editor) buildUI() {
 		if e.onCheckModified != nil {
 			e.onCheckModified()
 		}
+		e.hideCompletion()
 	})
 
 	e.resultsTable = tview.NewTable().
@@ -135,6 +140,7 @@ func (e *Editor) buildUI() {
 		SetTitleAlign(tview.AlignLeft)
 
 	e.queryStats = components.NewQueryStats()
+	e.completionOverlay = newCompletionOverlay(e.pages)
 
 	e.bottomFlex = tview.NewFlex().
 		AddItem(e.resultsTable, 0, 1, false)
@@ -150,6 +156,10 @@ func (e *Editor) buildUI() {
 
 func (e *Editor) setupKeybindings() {
 	e.sqlInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if e.handleCompletionInput(event) {
+			return nil
+		}
+
 		switch event.Key() {
 		case tcell.KeyEscape:
 			if e.isQueryRunning && e.queryCancel != nil {
@@ -462,6 +472,7 @@ func (e *Editor) toggleMode() {
 }
 
 func (e *Editor) Show() {
+	e.hideCompletion()
 	e.pages.AddPage("editor", e.mainFlex, true, true)
 	e.pages.SwitchToPage("editor")
 	e.app.SetFocus(e.sqlInput)
