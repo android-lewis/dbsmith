@@ -39,7 +39,7 @@ type App struct {
 	configDir string
 }
 
-func New() (*App, error) {
+func New(version string) (*App, error) {
 	configDir, err := config.GetConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config directory: %w", err)
@@ -75,6 +75,7 @@ func New() (*App, error) {
 	}
 
 	logging.Info().
+		Str("version", version).
 		Str("config_dir", configDir).
 		Msg("Starting DBSmith")
 

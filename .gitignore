@@ -32,7 +32,6 @@ go.work
 /build/
 /dist/
 /bin/
-dbsmith
 dbsmith.exe
 
 # Config and data

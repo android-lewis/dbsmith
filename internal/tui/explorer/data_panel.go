@@ -56,7 +56,11 @@ func (e *Explorer) loadDataPreview(tableName string) {
 			utils.FormatNumber(result.RowCount))
 		e.dataTable.SetTitle(title)
 
-		content := components.NewQueryResultContentWithMaxLen(result, constants.MaxPreviewCellLen)
+		maxCellWidth := e.dbApp.Config.UI.MaxPreviewCellWidth
+		if maxCellWidth <= 0 {
+			maxCellWidth = constants.MaxPreviewCellLen
+		}
+		content := components.NewQueryResultContentWithMaxLen(result, maxCellWidth)
 		content.ApplyAlternatingRowColors()
 		e.dataTable.SetContent(content)
 	})

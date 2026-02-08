@@ -4,6 +4,8 @@ import (
 	"github.com/android-lewis/dbsmith/internal/app"
 	"github.com/android-lewis/dbsmith/internal/tui/components"
 	"github.com/android-lewis/dbsmith/internal/tui/constants"
+	"github.com/android-lewis/dbsmith/internal/tui/theme"
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -47,8 +49,9 @@ func NewExplorer(app *tview.Application, pages *tview.Pages, dbApp *app.App, hel
 		helpBar:         helpBar,
 		statusBar:       statusBar,
 		dataLimit:       constants.DefaultDataLimit,
-		showDataPreview: true,
-		showSchemas:     true,
+		showDataPreview: dbApp.Config.UI.ShowDataPreview,
+		showSchemas:     dbApp.Config.UI.ShowSchemas,
+		showIndexes:     dbApp.Config.UI.ShowIndexes,
 	}
 
 	e.buildUI()
@@ -75,20 +78,39 @@ func (e *Explorer) buildUI() {
 
 	// Build left panel (schemas + tables)
 	e.leftFlex = tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(e.schemasList, 0, 1, true).
-		AddItem(e.tablesList, 0, 2, false)
+		SetDirection(tview.FlexRow)
+	if e.showSchemas {
+		e.leftFlex.AddItem(e.schemasList, 0, 1, true)
+	}
+	e.leftFlex.AddItem(e.tablesList, 0, 2, false)
 
 	// Build schema detail panel (columns + indexes)
 	e.schemaFlex = tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(e.columnsTable, 0, 1, false)
+	if e.showIndexes {
+		e.schemaFlex.AddItem(e.indexTable, 0, 1, false)
+	}
 
-	// Build main layout
+	e.dataTable = tview.NewTable().
+		SetBorders(false).
+		SetSelectable(true, false).
+		SetFixed(1, 0)
+
+	e.dataTable.SetBorder(true).
+		SetTitle(" Data Preview ").
+		SetTitleAlign(tview.AlignLeft)
+
+	e.dataTable.SetSelectedStyle(tcell.StyleDefault.
+		Background(theme.ThemeColors.Selection).
+		Foreground(theme.ThemeColors.SelectionText))
+
 	e.mainFlex = tview.NewFlex().
 		AddItem(e.leftFlex, 25, 0, true).
-		AddItem(e.schemaFlex, 35, 0, false).
-		AddItem(e.dataTable, 0, 1, false)
+		AddItem(e.schemaFlex, 35, 0, false)
+	if e.showDataPreview {
+		e.mainFlex.AddItem(e.dataTable, 0, 1, false)
+	}
 
 	e.setupKeybindings()
 }
