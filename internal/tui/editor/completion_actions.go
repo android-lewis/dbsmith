@@ -30,6 +30,12 @@ const completionMaxTables = 200
 func (e *Editor) handleCompletionInput(event *tcell.EventKey) bool {
 	if e.completionState.active {
 		switch event.Key() {
+		case tcell.KeyUp:
+			e.selectPrevCompletion()
+			return true
+		case tcell.KeyDown:
+			e.selectNextCompletion()
+			return true
 		case tcell.KeyTab:
 			e.selectNextCompletion()
 			return true
