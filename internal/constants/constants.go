@@ -9,10 +9,12 @@ const (
 )
 
 const (
-	DefaultLogFileName = "dbsmith.log"
-	DefaultMaxSizeMB   = 10
-	DefaultMaxBackups  = 3
-	DefaultMaxAgeDays  = 28
+	DefaultLogFileName       = "dbsmith.log"
+	DefaultConfigFileName    = "config.log"
+	DefaultWorkspaceFileName = "workspace.yaml"
+	DefaultMaxSizeMB         = 10
+	DefaultMaxBackups        = 3
+	DefaultMaxAgeDays        = 28
 )
 
 const (

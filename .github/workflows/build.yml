@@ -15,7 +15,7 @@ jobs:
         uses: hashicorp/actions-go-build@main
         with:
           product_name: dbsmith
-          go_version: 1.25.6
+          go_version: 1.25.7
           os: ${{ matrix.os }}
           arch: ${{ matrix.arch }}
           instructions: |-
