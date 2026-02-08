@@ -58,33 +58,105 @@ type Result struct {
 	Replace Range
 }
 
+type Analysis struct {
+	Word      string
+	Replace   Range
+	Qualifier string
+	Quote     string
+	Kinds     []ItemKind
+	Tables    []TableRef
+	Aliases   map[string]string
+	Suppress  bool
+}
+
+func (a Analysis) HasKind(kind ItemKind) bool {
+	for _, k := range a.Kinds {
+		if k == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func (a Analysis) TargetTables() []string {
+	stmt := statement{
+		Tables:  a.Tables,
+		Aliases: a.Aliases,
+	}
+	if a.Qualifier != "" {
+		if target := resolveQualifiedTable(a.Qualifier, stmt); target != "" {
+			return []string{target}
+		}
+	}
+	if len(a.Tables) == 0 {
+		return nil
+	}
+	return dedupeTableNames(a.Tables)
+}
+
 func Complete(req Request) (Result, error) {
-	tokens, err := tokenize(req.SQL, req.Dialect)
+	analysis, err := Analyze(req)
 	if err != nil {
 		return Result{}, err
+	}
+	return CompleteWithAnalysis(analysis, req.Context, req.Dialect), nil
+}
+
+func Analyze(req Request) (Analysis, error) {
+	tokens, err := tokenize(req.SQL, req.Dialect)
+	if err != nil {
+		return Analysis{}, err
 	}
 
 	word, replaceRange, qualifier, quote, suppress := currentWord(tokens, req.SQL, req.Position)
 	if suppress {
-		return Result{Replace: replaceRange}, nil
+		return Analysis{
+			Replace:   replaceRange,
+			Word:      word,
+			Qualifier: qualifier,
+			Quote:     quote,
+			Suppress:  true,
+		}, nil
 	}
 
 	lexemes := buildLexemes(tokens)
 	stmt := parseStatement(lexemes)
 	kinds := detectCompletionKinds(lexemes, req.Position)
 
-	items := buildCandidates(kinds, stmt, req.Context, req.Dialect, qualifier, quote)
-	items = filterCandidates(items, word)
+	return Analysis{
+		Word:      word,
+		Replace:   replaceRange,
+		Qualifier: qualifier,
+		Quote:     quote,
+		Kinds:     kinds.kinds,
+		Tables:    stmt.Tables,
+		Aliases:   stmt.Aliases,
+	}, nil
+}
+
+func CompleteWithAnalysis(analysis Analysis, context Context, dialect string) Result {
+	if analysis.Suppress {
+		return Result{Replace: analysis.Replace}
+	}
+
+	ctx := completionContext{kinds: analysis.Kinds}
+	stmt := statement{
+		Tables:  analysis.Tables,
+		Aliases: analysis.Aliases,
+	}
+
+	items := buildCandidates(ctx, stmt, context, dialect, analysis.Qualifier, analysis.Quote)
+	items = filterCandidates(items, analysis.Word)
 	sortCandidates(items)
 
 	return Result{
 		Items:   items,
-		Replace: replaceRange,
-	}, nil
+		Replace: analysis.Replace,
+	}
 }
 
 func sortCandidates(items []Item) {
-	sort.SliceStable(items, func(i, j int) bool {
+	sort.SliceStable(items, func(i, j int) bool { //TODO: use slices.SortStableFunc
 		rankI := kindRank(items[i].Kind)
 		rankJ := kindRank(items[j].Kind)
 		if rankI != rankJ {
@@ -105,4 +177,18 @@ func kindRank(kind ItemKind) int {
 	default:
 		return 3
 	}
+}
+
+func dedupeTableNames(tables []TableRef) []string {
+	seen := map[string]bool{}
+	results := make([]string, 0, len(tables))
+	for _, table := range tables {
+		key := strings.ToUpper(table.Name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		results = append(results, table.Name)
+	}
+	return results
 }

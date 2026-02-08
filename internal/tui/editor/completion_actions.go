@@ -2,6 +2,8 @@ package editor
 
 import (
 	"context"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/android-lewis/dbsmith/internal/autocomplete"
@@ -20,12 +22,20 @@ type completionState struct {
 }
 
 type completionCache struct {
-	context  autocomplete.Context
-	loadedAt time.Time
+	tables        []models.Table
+	tablesLoaded  time.Time
+	columnsByName map[string]columnCacheEntry
 }
 
-const completionCacheTTL = 30 * time.Second
+type columnCacheEntry struct {
+	columns []autocomplete.Column
+	loaded  time.Time
+}
+
 const completionMaxTables = 200
+const completionTablesTTL = 30 * time.Second
+const completionColumnsTTL = 2 * time.Minute
+const completionColumnWorkers = 4
 
 func (e *Editor) handleCompletionInput(event *tcell.EventKey) bool {
 	if e.completionState.active {
@@ -75,12 +85,6 @@ func (e *Editor) handleCompletionInput(event *tcell.EventKey) bool {
 }
 
 func (e *Editor) triggerCompletion() {
-	context, err := e.getAutocompleteContext()
-	if err != nil {
-		components.ShowError(e.pages, e.app, err)
-		return
-	}
-
 	line, col := e.sqlInput.CursorPosition()
 	request := autocomplete.Request{
 		SQL: e.sqlInput.GetText(),
@@ -89,14 +93,26 @@ func (e *Editor) triggerCompletion() {
 			Column: col,
 		},
 		Dialect: e.sqlInput.GetDialect(),
-		Context: context,
 	}
 
-	result, err := autocomplete.Complete(request)
+	analysis, err := autocomplete.Analyze(request)
 	if err != nil {
 		components.ShowError(e.pages, e.app, err)
 		return
 	}
+
+	if analysis.Suppress {
+		e.hideCompletion()
+		return
+	}
+
+	context, err := e.getAutocompleteContext(analysis)
+	if err != nil {
+		components.ShowError(e.pages, e.app, err)
+		return
+	}
+
+	result := autocomplete.CompleteWithAnalysis(analysis, context, request.Dialect)
 
 	if len(result.Items) == 0 {
 		e.hideCompletion()
@@ -158,21 +174,46 @@ func (e *Editor) applyCompletion() {
 	e.hideCompletion()
 }
 
-func (e *Editor) getAutocompleteContext() (autocomplete.Context, error) {
+func (e *Editor) getAutocompleteContext(analysis autocomplete.Analysis) (autocomplete.Context, error) {
 	if e.dbApp == nil || e.dbApp.Explorer == nil {
 		return autocomplete.Context{}, nil
 	}
 
-	if !e.completionCache.loadedAt.IsZero() && time.Since(e.completionCache.loadedAt) < completionCacheTTL {
-		return e.completionCache.context, nil
+	needsTables := analysis.HasKind(autocomplete.KindTable) || analysis.HasKind(autocomplete.KindColumn)
+	if !needsTables {
+		return autocomplete.Context{}, nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), constants.TimeoutAutocomplete)
 	defer cancel()
 
-	schemas, err := e.dbApp.Explorer.GetSchemas(ctx)
+	tables, err := e.loadCompletionTables(ctx)
 	if err != nil {
 		return autocomplete.Context{}, err
+	}
+
+	if len(tables) > completionMaxTables {
+		tables = tables[:completionMaxTables]
+	}
+
+	if !analysis.HasKind(autocomplete.KindColumn) {
+		return buildContextFromTables(tables, nil), nil
+	}
+
+	targets := analysis.TargetTables()
+	columnsByTable := e.loadCompletionColumns(ctx, tables, targets)
+
+	return buildContextFromTables(tables, columnsByTable), nil
+}
+
+func (e *Editor) loadCompletionTables(ctx context.Context) ([]models.Table, error) {
+	if !e.completionCache.tablesLoaded.IsZero() && time.Since(e.completionCache.tablesLoaded) < completionTablesTTL {
+		return e.completionCache.tables, nil
+	}
+
+	schemas, err := e.dbApp.Explorer.GetSchemas(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	if len(schemas) == 0 {
@@ -187,7 +228,7 @@ func (e *Editor) getAutocompleteContext() (autocomplete.Context, error) {
 	for _, schema := range schemas {
 		schemaTables, err := e.dbApp.Explorer.GetTables(ctx, schema)
 		if err != nil {
-			return autocomplete.Context{}, err
+			return nil, err
 		}
 		tables = append(tables, schemaTables...)
 		if len(tables) >= completionMaxTables {
@@ -196,36 +237,104 @@ func (e *Editor) getAutocompleteContext() (autocomplete.Context, error) {
 		}
 	}
 
+	e.completionCache.tables = tables
+	e.completionCache.tablesLoaded = time.Now()
+	return tables, nil
+}
+
+func (e *Editor) loadCompletionColumns(ctx context.Context, tables []models.Table, targetNames []string) map[string][]autocomplete.Column {
+	if len(tables) == 0 {
+		return nil
+	}
+
+	if e.completionCache.columnsByName == nil {
+		e.completionCache.columnsByName = make(map[string]columnCacheEntry)
+	}
+
+	columnsByTable := map[string][]autocomplete.Column{}
+	targetSet := map[string]bool{}
+	for _, name := range targetNames {
+		targetSet[strings.ToUpper(name)] = true
+	}
+
+	var tablesToLoad []models.Table
+	for _, table := range tables {
+		key := strings.ToUpper(table.Name)
+		if len(targetSet) > 0 && !targetSet[key] {
+			continue
+		}
+		entry, ok := e.completionCache.columnsByName[key]
+		if ok && time.Since(entry.loaded) < completionColumnsTTL {
+			columnsByTable[key] = entry.columns
+			continue
+		}
+		tablesToLoad = append(tablesToLoad, table)
+	}
+
+	if len(tablesToLoad) == 0 {
+		return columnsByTable
+	}
+
+	var mu sync.Mutex
+	newEntries := make(map[string]columnCacheEntry)
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, completionColumnWorkers)
+
+	for _, table := range tablesToLoad {
+		table := table
+		key := strings.ToUpper(table.Name)
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			columns, err := e.dbApp.Explorer.GetTableColumns(ctx, table.Name)
+			if err != nil {
+				logging.Warn().
+					Err(err).
+					Str("table", table.Name).
+					Msg("Failed to load columns for autocomplete")
+				return
+			}
+
+			cols := make([]autocomplete.Column, 0, len(columns.Columns))
+			for _, col := range columns.Columns {
+				cols = append(cols, autocomplete.Column{Name: col.Name})
+			}
+
+			mu.Lock()
+			columnsByTable[key] = cols
+			newEntries[key] = columnCacheEntry{
+				columns: cols,
+				loaded:  time.Now(),
+			}
+			mu.Unlock()
+		}()
+	}
+
+	wg.Wait()
+
+	for key, entry := range newEntries {
+		e.completionCache.columnsByName[key] = entry
+	}
+
+	return columnsByTable
+}
+
+func buildContextFromTables(tables []models.Table, columnsByTable map[string][]autocomplete.Column) autocomplete.Context {
 	contextResult := autocomplete.Context{
 		Tables: make([]autocomplete.Table, 0, len(tables)),
 	}
 
 	for _, table := range tables {
-		columns, err := e.dbApp.Explorer.GetTableColumns(ctx, table.Name)
-		if err != nil {
-			logging.Warn().
-				Err(err).
-				Str("table", table.Name).
-				Msg("Failed to load columns for autocomplete")
-			continue
-		}
-
-		cols := make([]autocomplete.Column, 0, len(columns.Columns))
-		for _, col := range columns.Columns {
-			cols = append(cols, autocomplete.Column{Name: col.Name})
-		}
-
+		key := strings.ToUpper(table.Name)
 		contextResult.Tables = append(contextResult.Tables, autocomplete.Table{
 			Name:    table.Name,
 			Schema:  table.Schema,
-			Columns: cols,
+			Columns: columnsByTable[key],
 		})
 	}
 
-	e.completionCache = completionCache{
-		context:  contextResult,
-		loadedAt: time.Now(),
-	}
-
-	return contextResult, nil
+	return contextResult
 }

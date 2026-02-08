@@ -21,14 +21,14 @@ type lexeme struct {
 	End   Position
 }
 
-type tableRef struct {
+type TableRef struct {
 	Name   string
 	Schema string
 	Alias  string
 }
 
 type statement struct {
-	Tables  []tableRef
+	Tables  []TableRef
 	Aliases map[string]string
 }
 
@@ -108,8 +108,8 @@ func parseStatement(lexemes []lexeme) statement {
 	}
 }
 
-func extractTables(lexemes []lexeme) ([]tableRef, map[string]string) {
-	var tables []tableRef
+func extractTables(lexemes []lexeme) ([]TableRef, map[string]string) {
+	var tables []TableRef
 	aliases := map[string]string{}
 
 	for i := 0; i < len(lexemes); i++ {
@@ -131,8 +131,8 @@ func extractTables(lexemes []lexeme) ([]tableRef, map[string]string) {
 	return tables, aliases
 }
 
-func parseTablesAfter(lexemes []lexeme, start int) ([]tableRef, int) {
-	var refs []tableRef
+func parseTablesAfter(lexemes []lexeme, start int) ([]TableRef, int) {
+	var refs []TableRef
 	i := start
 	for i < len(lexemes) {
 		lex := lexemes[i]
@@ -155,7 +155,7 @@ func parseTablesAfter(lexemes []lexeme, start int) ([]tableRef, int) {
 	return refs, i - 1
 }
 
-func parseSingleTable(lexemes []lexeme, start int) (tableRef, int) {
+func parseSingleTable(lexemes []lexeme, start int) (TableRef, int) {
 	name := lexemes[start].Value
 	schema := ""
 	i := start + 1
@@ -180,7 +180,7 @@ func parseSingleTable(lexemes []lexeme, start int) (tableRef, int) {
 		i++
 	}
 
-	return tableRef{
+	return TableRef{
 		Name:   name,
 		Schema: schema,
 		Alias:  alias,
