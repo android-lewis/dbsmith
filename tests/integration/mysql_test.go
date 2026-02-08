@@ -196,7 +196,7 @@ func TestMySQLSchemaOperations(t *testing.T) {
 	}
 
 	// Test getting columns
-	columns, err := driver.GetTableColumns(ctx, "users")
+	columns, err := driver.GetTableColumns(ctx, "dbsmith_test", "users")
 	if err != nil {
 		t.Fatalf("Failed to get columns: %v", err)
 	}
