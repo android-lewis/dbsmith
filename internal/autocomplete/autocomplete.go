@@ -29,7 +29,8 @@ type Table struct {
 }
 
 type Context struct {
-	Tables []Table
+	Tables         []Table
+	ColumnsByTable map[string][]Column
 }
 
 type ItemKind int
@@ -80,8 +81,9 @@ func (a Analysis) HasKind(kind ItemKind) bool {
 
 func (a Analysis) TargetTables() []string {
 	stmt := statement{
-		Tables:  a.Tables,
-		Aliases: a.Aliases,
+		Tables:      a.Tables,
+		Aliases:     a.Aliases,
+		TableLookup: tableLookupFromRefs(a.Tables),
 	}
 	if a.Qualifier != "" {
 		if target := resolveQualifiedTable(a.Qualifier, stmt); target != "" {
@@ -141,8 +143,9 @@ func CompleteWithAnalysis(analysis Analysis, context Context, dialect string) Re
 
 	ctx := completionContext{kinds: analysis.Kinds}
 	stmt := statement{
-		Tables:  analysis.Tables,
-		Aliases: analysis.Aliases,
+		Tables:      analysis.Tables,
+		Aliases:     analysis.Aliases,
+		TableLookup: tableLookupFromRefs(analysis.Tables),
 	}
 
 	items := buildCandidates(ctx, stmt, context, dialect, analysis.Qualifier, analysis.Quote)
@@ -156,13 +159,20 @@ func CompleteWithAnalysis(analysis Analysis, context Context, dialect string) Re
 }
 
 func sortCandidates(items []Item) {
+	if len(items) <= 1 {
+		return
+	}
+	ranks := make([]int, len(items))
+	labels := make([]string, len(items))
+	for i, item := range items {
+		ranks[i] = kindRank(item.Kind)
+		labels[i] = strings.ToUpper(item.Label)
+	}
 	sort.SliceStable(items, func(i, j int) bool { //TODO: use slices.SortStableFunc
-		rankI := kindRank(items[i].Kind)
-		rankJ := kindRank(items[j].Kind)
-		if rankI != rankJ {
-			return rankI < rankJ
+		if ranks[i] != ranks[j] {
+			return ranks[i] < ranks[j]
 		}
-		return strings.ToUpper(items[i].Label) < strings.ToUpper(items[j].Label)
+		return labels[i] < labels[j]
 	})
 }
 

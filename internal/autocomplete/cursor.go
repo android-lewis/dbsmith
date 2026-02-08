@@ -8,7 +8,7 @@ import (
 )
 
 var wordMatcher = regexp.MustCompile("([`\"]?[\\w$]+)$")
-var qualifierMatcher = regexp.MustCompile(`([A-Za-z_][\w$]*)\.$`)
+var qualifierMatcher = regexp.MustCompile(`([A-Za-z_][\w$]*)\.[\w$]*$`)
 
 func currentWord(tokens []Token, sql string, pos Position) (string, Range, string, string, bool) {
 	replace := Range{Start: pos, End: pos}

@@ -28,8 +28,9 @@ type TableRef struct {
 }
 
 type statement struct {
-	Tables  []TableRef
-	Aliases map[string]string
+	Tables      []TableRef
+	Aliases     map[string]string
+	TableLookup map[string]string
 }
 
 type completionContext struct {
@@ -65,6 +66,16 @@ func buildLexemes(tokens []Token) []lexeme {
 			continue
 		}
 
+		if isPunctuationLiteral(trimmed) {
+			lexemes = append(lexemes, lexeme{
+				Kind:  lexemePunctuation,
+				Value: trimmed,
+				Start: token.Start,
+				End:   token.End,
+			})
+			continue
+		}
+
 		upper := strings.ToUpper(trimmed)
 		switch {
 		case isKeyword(upper):
@@ -74,14 +85,7 @@ func buildLexemes(tokens []Token) []lexeme {
 				Start: token.Start,
 				End:   token.End,
 			})
-		case token.Type.InCategory(chroma.Keyword):
-			lexemes = append(lexemes, lexeme{
-				Kind:  lexemeKeyword,
-				Value: upper,
-				Start: token.Start,
-				End:   token.End,
-			})
-		case token.Type.InCategory(chroma.Name) || token.Type.InCategory(chroma.LiteralString):
+		case token.Type.InCategory(chroma.Name) || token.Type.InCategory(chroma.LiteralString) || token.Type.InCategory(chroma.Keyword):
 			lexemes = append(lexemes, lexeme{
 				Kind:  lexemeIdentifier,
 				Value: normalizeIdentifier(trimmed),
@@ -103,9 +107,21 @@ func buildLexemes(tokens []Token) []lexeme {
 func parseStatement(lexemes []lexeme) statement {
 	tables, aliases := extractTables(lexemes)
 	return statement{
-		Tables:  tables,
-		Aliases: aliases,
+		Tables:      tables,
+		Aliases:     aliases,
+		TableLookup: tableLookupFromRefs(tables),
 	}
+}
+
+func tableLookupFromRefs(tables []TableRef) map[string]string {
+	tableLookup := map[string]string{}
+	for _, table := range tables {
+		key := strings.ToUpper(table.Name)
+		if _, ok := tableLookup[key]; !ok {
+			tableLookup[key] = table.Name
+		}
+	}
+	return tableLookup
 }
 
 func extractTables(lexemes []lexeme) ([]TableRef, map[string]string) {
@@ -326,6 +342,15 @@ func isTableStopKeyword(keyword string) bool {
 
 func normalizeIdentifier(value string) string {
 	return strings.Trim(value, "`\"")
+}
+
+func isPunctuationLiteral(value string) bool {
+	switch value {
+	case ".", ",", "(", ")", ";":
+		return true
+	default:
+		return false
+	}
 }
 
 func posAfterStart(pos Position, start Position) bool {

@@ -324,7 +324,8 @@ func (e *Editor) loadCompletionColumns(ctx context.Context, tables []models.Tabl
 
 func buildContextFromTables(tables []models.Table, columnsByTable map[string][]autocomplete.Column) autocomplete.Context {
 	contextResult := autocomplete.Context{
-		Tables: make([]autocomplete.Table, 0, len(tables)),
+		Tables:         make([]autocomplete.Table, 0, len(tables)),
+		ColumnsByTable: make(map[string][]autocomplete.Column, len(tables)),
 	}
 
 	for _, table := range tables {
@@ -334,6 +335,9 @@ func buildContextFromTables(tables []models.Table, columnsByTable map[string][]a
 			Schema:  table.Schema,
 			Columns: columnsByTable[key],
 		})
+		if len(columnsByTable[key]) > 0 {
+			contextResult.ColumnsByTable[key] = columnsByTable[key]
+		}
 	}
 
 	return contextResult

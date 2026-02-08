@@ -1,6 +1,7 @@
 package autocomplete
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -22,12 +23,7 @@ func buildCandidates(ctx completionContext, stmt statement, dbContext Context, d
 }
 
 func hasKind(kinds []ItemKind, kind ItemKind) bool {
-	for _, k := range kinds {
-		if k == kind {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(kinds, kind)
 }
 
 func keywordCandidates(dialect string) []Item {
@@ -61,9 +57,12 @@ func tableCandidates(ctx Context, quote string) []Item {
 }
 
 func columnCandidates(stmt statement, ctx Context, qualifier, quote string) []Item {
-	columnsByTable := map[string][]Column{}
-	for _, table := range ctx.Tables {
-		columnsByTable[strings.ToUpper(table.Name)] = table.Columns
+	columnsByTable := ctx.ColumnsByTable
+	if columnsByTable == nil {
+		columnsByTable = make(map[string][]Column, len(ctx.Tables))
+		for _, table := range ctx.Tables {
+			columnsByTable[strings.ToUpper(table.Name)] = table.Columns
+		}
 	}
 
 	var targetTables []string
@@ -87,7 +86,7 @@ func columnCandidates(stmt statement, ctx Context, qualifier, quote string) []It
 	}
 
 	var items []Item
-	for _, tableName := range targetTables {
+	for _, tableName := range dedupeStrings(targetTables) {
 		cols := columnsByTable[strings.ToUpper(tableName)]
 		for _, col := range cols {
 			label := col.Name
@@ -128,6 +127,9 @@ func resolveQualifiedTable(qualifier string, stmt statement) string {
 	if resolved, ok := stmt.Aliases[upper]; ok {
 		return resolved
 	}
+	if resolved, ok := stmt.TableLookup[upper]; ok {
+		return resolved
+	}
 
 	for _, table := range stmt.Tables {
 		if strings.EqualFold(table.Name, qualifier) {
@@ -142,11 +144,11 @@ func filterCandidates(items []Item, prefix string) []Item {
 		return items
 	}
 
+	upperPrefix := strings.ToUpper(prefix)
 	filtered := make([]Item, 0, len(items))
 	for _, item := range items {
 		value := strings.Trim(item.Label, "`\"")
 		upperValue := strings.ToUpper(value)
-		upperPrefix := strings.ToUpper(prefix)
 		matched := strings.HasPrefix(upperValue, upperPrefix)
 		if !matched {
 			if dot := strings.LastIndex(value, "."); dot >= 0 && dot+1 < len(value) {
@@ -171,6 +173,20 @@ func dedupeItems(items []Item) []Item {
 		}
 		seen[key] = true
 		result = append(result, item)
+	}
+	return result
+}
+
+func dedupeStrings(values []string) []string {
+	seen := map[string]bool{}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		key := strings.ToUpper(value)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, value)
 	}
 	return result
 }
