@@ -84,12 +84,13 @@ func (d *SQLiteDriver) GetTables(ctx context.Context, schema models.Schema) ([]m
 	return tables, rows.Err()
 }
 
-func (d *SQLiteDriver) GetTableColumns(ctx context.Context, tableName string) (*models.TableColumns, error) {
+func (d *SQLiteDriver) GetTableColumns(ctx context.Context, schemaName, tableName string) (*models.TableColumns, error) {
 	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
 	tableName = strings.TrimSpace(tableName)
+	// SQLite ignores schema (single schema per database)
 
 	if err := validateSQLiteIdentifier(tableName); err != nil {
 		return nil, fmt.Errorf("invalid table name: %w", err)

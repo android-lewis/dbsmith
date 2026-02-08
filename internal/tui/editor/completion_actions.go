@@ -37,6 +37,17 @@ const completionTablesTTL = 30 * time.Second
 const completionColumnsTTL = 2 * time.Minute
 const completionColumnWorkers = 4
 
+// tableKey returns a normalized cache key for a table including its schema.
+// Format: "SCHEMA.TABLE" (uppercase). Empty schema uses empty prefix.
+func tableKey(schema, table string) string {
+	s := strings.ToUpper(schema)
+	t := strings.ToUpper(table)
+	if s == "" {
+		return t
+	}
+	return s + "." + t
+}
+
 func (e *Editor) handleCompletionInput(event *tcell.EventKey) bool {
 	if e.completionState.active {
 		switch event.Key() {
@@ -106,13 +117,13 @@ func (e *Editor) triggerCompletion() {
 		return
 	}
 
-	context, err := e.getAutocompleteContext(analysis)
+	acContext, err := e.getAutocompleteContext(analysis)
 	if err != nil {
 		components.ShowError(e.pages, e.app, err)
 		return
 	}
 
-	result := autocomplete.CompleteWithAnalysis(analysis, context, request.Dialect)
+	result := autocomplete.CompleteWithAnalysis(analysis, acContext, request.Dialect)
 
 	if len(result.Items) == 0 {
 		e.hideCompletion()
@@ -259,8 +270,10 @@ func (e *Editor) loadCompletionColumns(ctx context.Context, tables []models.Tabl
 
 	var tablesToLoad []models.Table
 	for _, table := range tables {
-		key := strings.ToUpper(table.Name)
-		if len(targetSet) > 0 && !targetSet[key] {
+		key := tableKey(table.Schema, table.Name)
+		// Also check for unqualified name match if target has no schema
+		nameOnly := strings.ToUpper(table.Name)
+		if len(targetSet) > 0 && !targetSet[key] && !targetSet[nameOnly] {
 			continue
 		}
 		entry, ok := e.completionCache.columnsByName[key]
@@ -282,18 +295,19 @@ func (e *Editor) loadCompletionColumns(ctx context.Context, tables []models.Tabl
 
 	for _, table := range tablesToLoad {
 		table := table
-		key := strings.ToUpper(table.Name)
+		key := tableKey(table.Schema, table.Name)
 		wg.Add(1)
 		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			columns, err := e.dbApp.Explorer.GetTableColumns(ctx, table.Name)
+			columns, err := e.dbApp.Explorer.GetTableColumns(ctx, table.Schema, table.Name)
 			if err != nil {
 				logging.Warn().
 					Err(err).
 					Str("table", table.Name).
+					Str("schema", table.Schema).
 					Msg("Failed to load columns for autocomplete")
 				return
 			}
@@ -325,18 +339,26 @@ func (e *Editor) loadCompletionColumns(ctx context.Context, tables []models.Tabl
 func buildContextFromTables(tables []models.Table, columnsByTable map[string][]autocomplete.Column) autocomplete.Context {
 	contextResult := autocomplete.Context{
 		Tables:         make([]autocomplete.Table, 0, len(tables)),
-		ColumnsByTable: make(map[string][]autocomplete.Column, len(tables)),
+		ColumnsByTable: make(map[string][]autocomplete.Column, len(tables)*2),
 	}
 
 	for _, table := range tables {
-		key := strings.ToUpper(table.Name)
+		key := tableKey(table.Schema, table.Name)
+		nameOnly := strings.ToUpper(table.Name)
+		cols := columnsByTable[key]
 		contextResult.Tables = append(contextResult.Tables, autocomplete.Table{
 			Name:    table.Name,
 			Schema:  table.Schema,
-			Columns: columnsByTable[key],
+			Columns: cols,
 		})
-		if len(columnsByTable[key]) > 0 {
-			contextResult.ColumnsByTable[key] = columnsByTable[key]
+		if len(cols) > 0 {
+			// Store under schema-qualified key
+			contextResult.ColumnsByTable[key] = cols
+			// Also store under unqualified name for alias/simple lookups
+			// (only if not already set, to avoid overwriting with wrong schema's columns)
+			if _, exists := contextResult.ColumnsByTable[nameOnly]; !exists {
+				contextResult.ColumnsByTable[nameOnly] = cols
+			}
 		}
 	}
 

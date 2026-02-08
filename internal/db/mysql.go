@@ -100,12 +100,13 @@ func (d *MySQLDriver) GetTables(ctx context.Context, schema models.Schema) ([]mo
 	return tables, rows.Err()
 }
 
-func (d *MySQLDriver) GetTableColumns(ctx context.Context, tableName string) (*models.TableColumns, error) {
+func (d *MySQLDriver) GetTableColumns(ctx context.Context, schemaName, tableName string) (*models.TableColumns, error) {
 	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
 	tableName = strings.TrimSpace(tableName)
+	schemaName = strings.TrimSpace(schemaName)
 
 	if err := validateMySQLIdentifier(tableName); err != nil {
 		return nil, fmt.Errorf("invalid table name: %w", err)
@@ -119,11 +120,18 @@ func (d *MySQLDriver) GetTableColumns(ctx context.Context, tableName string) (*m
 			COLUMN_DEFAULT,
 			COLUMN_KEY
 		FROM INFORMATION_SCHEMA.COLUMNS
-		WHERE TABLE_NAME = ?
+		WHERE TABLE_NAME = ? AND TABLE_SCHEMA = ?
 		ORDER BY ORDINAL_POSITION
 	`
 
-	rows, err := d.BaseDb().QueryContext(ctx, columnQuery, tableName)
+	// If schemaName is empty, use current database
+	if schemaName == "" {
+		if err := d.BaseDb().QueryRowContext(ctx, "SELECT DATABASE()").Scan(&schemaName); err != nil {
+			return nil, fmt.Errorf("failed to get current database: %w", err)
+		}
+	}
+
+	rows, err := d.BaseDb().QueryContext(ctx, columnQuery, tableName, schemaName)
 	if err != nil {
 		return nil, err
 	}
@@ -152,12 +160,13 @@ func (d *MySQLDriver) GetTableColumns(ctx context.Context, tableName string) (*m
 	}
 
 	var ddl string
-	ddlQuery := fmt.Sprintf("SHOW CREATE TABLE `%s`", tableName)
+	ddlQuery := fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", schemaName, tableName)
 	var createTableDDL string
 	if err := d.BaseDb().QueryRowContext(ctx, ddlQuery).Scan(&tableName, &createTableDDL); err != nil {
 		logging.Warn().
 			Err(err).
 			Str("table", tableName).
+			Str("schema", schemaName).
 			Msg("Failed to retrieve DDL for table, continuing with empty DDL")
 	}
 	ddl = createTableDDL

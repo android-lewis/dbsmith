@@ -35,7 +35,7 @@ func TestGetTableSchema(t *testing.T) {
 
 	qe := NewExplorer(driver)
 
-	schema, err := qe.GetTableColumns(context.Background(), "users")
+	schema, err := qe.GetTableColumns(context.Background(), "public", "users")
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}

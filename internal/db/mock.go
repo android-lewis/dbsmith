@@ -164,7 +164,7 @@ func (md *MockDriver) GetTables(ctx context.Context, schema models.Schema) ([]mo
 	}, nil
 }
 
-func (md *MockDriver) GetTableColumns(ctx context.Context, tableName string) (*models.TableColumns, error) {
+func (md *MockDriver) GetTableColumns(ctx context.Context, schemaName, tableName string) (*models.TableColumns, error) {
 	if !md.IsConnected() {
 		return nil, ErrNotConnected
 	}

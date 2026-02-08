@@ -162,17 +162,13 @@ func sortCandidates(items []Item) {
 	if len(items) <= 1 {
 		return
 	}
-	ranks := make([]int, len(items))
-	labels := make([]string, len(items))
-	for i, item := range items {
-		ranks[i] = kindRank(item.Kind)
-		labels[i] = strings.ToUpper(item.Label)
-	}
-	sort.SliceStable(items, func(i, j int) bool { //TODO: use slices.SortStableFunc
-		if ranks[i] != ranks[j] {
-			return ranks[i] < ranks[j]
+	sort.SliceStable(items, func(i, j int) bool {
+		rankI := kindRank(items[i].Kind)
+		rankJ := kindRank(items[j].Kind)
+		if rankI != rankJ {
+			return rankI < rankJ
 		}
-		return labels[i] < labels[j]
+		return strings.ToUpper(items[i].Label) < strings.ToUpper(items[j].Label)
 	})
 }
 
