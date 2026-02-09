@@ -193,7 +193,7 @@ func TestPostgresSchemaOperations(t *testing.T) {
 	}
 
 	// Test getting columns
-	columns, err := driver.GetTableColumns(ctx, "users")
+	columns, err := driver.GetTableColumns(ctx, "public", "users")
 	if err != nil {
 		t.Fatalf("Failed to get columns: %v", err)
 	}

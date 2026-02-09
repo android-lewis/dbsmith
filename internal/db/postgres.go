@@ -90,12 +90,16 @@ func (d *PostgresDriver) GetTables(ctx context.Context, schema models.Schema) ([
 	return tables, rows.Err()
 }
 
-func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) (*models.TableColumns, error) {
+func (d *PostgresDriver) GetTableColumns(ctx context.Context, schemaName, tableName string) (*models.TableColumns, error) {
 	if !d.IsConnected() || d.BaseDb() == nil {
 		return nil, ErrNotConnected
 	}
 
 	tableName = strings.TrimSpace(tableName)
+	schemaName = strings.TrimSpace(schemaName)
+	if schemaName == "" {
+		schemaName = "public"
+	}
 
 	columnQuery := `
 		SELECT 
@@ -114,6 +118,7 @@ func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) 
 				AND tc.table_schema = kcu.table_schema
 			WHERE tc.constraint_type = 'PRIMARY KEY'
 				AND tc.table_name = $1
+				AND tc.table_schema = $2
 		) pk ON c.column_name = pk.column_name
 		LEFT JOIN (
 			SELECT kcu.column_name
@@ -123,12 +128,13 @@ func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) 
 				AND tc.table_schema = kcu.table_schema
 			WHERE tc.constraint_type = 'FOREIGN KEY'
 				AND tc.table_name = $1
+				AND tc.table_schema = $2
 		) fk ON c.column_name = fk.column_name
-		WHERE c.table_name = $1
+		WHERE c.table_name = $1 AND c.table_schema = $2
 		ORDER BY c.ordinal_position
 	`
 
-	rows, err := d.BaseDb().QueryContext(ctx, columnQuery, tableName)
+	rows, err := d.BaseDb().QueryContext(ctx, columnQuery, tableName, schemaName)
 	if err != nil {
 		return nil, err
 	}
@@ -153,12 +159,13 @@ func (d *PostgresDriver) GetTableColumns(ctx context.Context, tableName string) 
 		return nil, ErrTableNotFound
 	}
 
-	ddlQuery := fmt.Sprintf("SELECT pg_get_ddl('public'::regnamespace, '%s'::regclass)", tableName)
+	ddlQuery := fmt.Sprintf("SELECT pg_get_ddl('%s'::regnamespace, '%s'::regclass)", schemaName, tableName)
 	var ddl string
 	if err := d.BaseDb().QueryRowContext(ctx, ddlQuery).Scan(&ddl); err != nil {
 		logging.Warn().
 			Err(err).
 			Str("table", tableName).
+			Str("schema", schemaName).
 			Msg("Failed to retrieve DDL for table, continuing with empty DDL")
 	}
 

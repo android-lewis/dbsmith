@@ -39,11 +39,11 @@ func (e *Explorer) GetTables(ctx context.Context, schema models.Schema) ([]model
 	return tables, nil
 }
 
-func (e *Explorer) GetTableColumns(ctx context.Context, tableName string) (*models.TableColumns, error) {
+func (e *Explorer) GetTableColumns(ctx context.Context, schemaName, tableName string) (*models.TableColumns, error) {
 	ctx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
 
-	return e.driver.GetTableColumns(ctx, tableName)
+	return e.driver.GetTableColumns(ctx, schemaName, tableName)
 }
 
 func (e *Explorer) GetSchemas(ctx context.Context) ([]models.Schema, error) {

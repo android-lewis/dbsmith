@@ -45,7 +45,7 @@ func (e *Explorer) loadColumns(tableName string) {
 	ctx, cancel := context.WithTimeout(context.Background(), constants.TimeoutSchemaLoad)
 	defer cancel()
 
-	schema, err := e.dbApp.Explorer.GetTableColumns(ctx, tableName)
+	schema, err := e.dbApp.Explorer.GetTableColumns(ctx, e.selectedSchema, tableName)
 	if err != nil {
 		e.app.QueueUpdateDraw(func() {
 			e.columnsTable.Clear()

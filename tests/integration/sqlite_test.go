@@ -185,7 +185,7 @@ func TestSQLiteSchemaOperations(t *testing.T) {
 	}
 
 	// Test getting columns
-	columns, err := driver.GetTableColumns(ctx, "users")
+	columns, err := driver.GetTableColumns(ctx, "", "users")
 	if err != nil {
 		t.Fatalf("Failed to get columns: %v", err)
 	}

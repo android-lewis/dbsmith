@@ -19,7 +19,7 @@ type Driver interface {
 	ExecuteNonQuery(ctx context.Context, sql string, args ...any) (int64, error)
 	GetSchemas(ctx context.Context) ([]models.Schema, error)
 	GetTables(ctx context.Context, schema models.Schema) ([]models.Table, error)
-	GetTableColumns(ctx context.Context, tableName string) (*models.TableColumns, error)
+	GetTableColumns(ctx context.Context, schemaName, tableName string) (*models.TableColumns, error)
 	GetTableData(ctx context.Context, tableName string, limit int, offset int) (*models.QueryResult, error)
 	GetTableIndexes(ctx context.Context, table string) ([]models.Index, error)
 	ExecuteTransaction(ctx context.Context, queries []string) error

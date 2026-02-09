@@ -75,6 +75,10 @@ func (e *SQLEditor) SetDialect(dialect string) *SQLEditor {
 	return e
 }
 
+func (e *SQLEditor) GetDialect() string {
+	return e.dialect
+}
+
 func (e *SQLEditor) SetPlaceholder(placeholder string) *SQLEditor {
 
 	lines := strings.Split(placeholder, "\n")
@@ -87,6 +91,22 @@ func (e *SQLEditor) SetPlaceholder(placeholder string) *SQLEditor {
 func (e *SQLEditor) SetInputCapture(capture func(event *tcell.EventKey) *tcell.EventKey) *SQLEditor {
 	e.TextArea.SetInputCapture(capture)
 	return e
+}
+
+func (e *SQLEditor) CursorPosition() (int, int) {
+	_, _, row, col := e.TextArea.GetCursor()
+	return row, col
+}
+
+func (e *SQLEditor) OffsetAt(line, col int) int {
+	text := e.GetText()
+	lines := strings.Split(text, "\n")
+	return e.offsetAt(lines, line, col)
+}
+
+func (e *SQLEditor) ReplaceRange(start, end int, text string) {
+	e.TextArea.Replace(start, end, text)
+	e.contentChanged = true
 }
 
 func (e *SQLEditor) Draw(screen tcell.Screen) {
@@ -156,13 +176,20 @@ func (e *SQLEditor) Draw(screen tcell.Screen) {
 	}
 }
 
+// offsetAt computes a byte offset from a (line, col) position where col is a rune index.
+// This ensures cursor positions (which are rune-based) align with byte offsets for replacements.
 func (e *SQLEditor) offsetAt(lines []string, line, col int) int {
 	offset := 0
 	for i := 0; i < line && i < len(lines); i++ {
-		offset += len(lines[i]) + 1
+		offset += len(lines[i]) + 1 // +1 for newline byte
 	}
-	if line < len(lines) && col <= len(lines[line]) {
-		offset += col
+	if line < len(lines) {
+		lineRunes := []rune(lines[line])
+		if col > len(lineRunes) {
+			col = len(lineRunes)
+		}
+		// Convert rune index to byte offset within the line
+		offset += len(string(lineRunes[:col]))
 	}
 	return offset
 }
